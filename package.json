@@ -16,6 +16,9 @@
     "format:check": "prettier --check .",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
   },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/node": "^24.6.1",
@@ -25,6 +28,7 @@
     "globals": "^16.4.0",
     "prettier": "^3.6.2",
     "turbo": "^2.5.8",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.44.1",
     "vitest": "^3.2.4"

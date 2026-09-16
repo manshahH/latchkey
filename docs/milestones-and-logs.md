@@ -29,9 +29,9 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 ## 2. Current state (update at the end of every session)
 
 **Last updated:** 2026-09-16
-**Branch in progress:** unavailable (the supplied workspace has no `.git` directory).
-**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, and nine shared package workspaces. Each workspace has a trivial exported function and passing test. No product behavior, database, or infrastructure yet.
-**Next action:** M0 task 3, implement `packages/config` with Zod environment parsing and boot failure tests.
+**Branch in progress:** `main` (owner requested direct commits).
+**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, and API fail-fast boot behavior. No product behavior, database, or infrastructure yet.
+**Next action:** M0 task 4, implement Drizzle, migrations with up and down support, and local database commands.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** none yet.
@@ -209,6 +209,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M0 task 3 fail-fast configuration
+- Branch / commits: `main`; initial foundation commit `b3ca1ba` is pushed to `origin/main`. Owner explicitly requested direct commits on `main`.
+- Goal: validate required configuration at boot so the API never starts with missing database or session settings.
+- Plan: create a Zod schema in `packages/config`, document every variable in `.env.example`, make API boot parse it, and test missing configuration both in process and at the API entry point.
+- Done: added `LATCHKEY_DATABASE_URL`, `LATCHKEY_SESSION_SECRET`, and `NODE_ENV` validation. API boot exits with code 1 and a safe, clear message when required configuration is absent. Added `tsx` only to execute the TypeScript API entry point during development and tests.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): `pnpm.cmd check` passed ESLint, strict TypeScript, Vitest (13 test files and 14 tests), and Prettier. The focused test command also passed. No CI workflow exists yet, by M0 task order.
+- Negative tests added and how each was proven non-vacuous: `api boot fails clearly when required configuration is absent` asserts process exit code 1 and the missing variable name. Temporarily making `LATCHKEY_DATABASE_URL` optional caused this test and the config unit test to fail; restoring the requirement made the full check pass.
+- Decisions made: none.
+- Edge cases considered: absent required values, malformed URL values, short session secrets, unknown environment variables, and safe error text that never includes a secret value.
+- Problems hit and how solved: none in the implementation. The Windows PowerShell policy requires `pnpm.cmd` instead of `pnpm`.
+- Not done / deferred (and why): provider, GitHub, email, and production-specific variables are introduced only with the components that use them, then added to `.env.example` in the same change.
+- Docs updated: architecture error model, current state, and this work log.
+- Next step: M0 task 4.
 
 ### 2026-09-16: M0 task 1 workspace tooling
 - Branch / commits: unavailable. The supplied workspace has no `.git` directory, so I could not create the required task branch or commit.

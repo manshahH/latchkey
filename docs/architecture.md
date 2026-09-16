@@ -454,7 +454,7 @@ Repo access cannot pin a version. For github_team products with `updates_until`,
 
 ## 12. Error handling model
 
-Every error is one of these classes (`packages/core/errors.ts`):
+Every application error after startup is one of these classes (`packages/core/errors.ts`). Startup configuration uses `ConfigurationError` from `packages/config` because it exits before the application has started:
 
 | Class | Example | Behavior |
 |---|---|---|
@@ -465,6 +465,7 @@ Every error is one of these classes (`packages/core/errors.ts`):
 | `ExternalTransientError` | GitHub 5xx, 429, timeout, network | Retry with backoff, respect Retry-After |
 | `ExternalPermanentError` | GitHub 404 user gone, 422 cannot invite, provider key revoked | No retry, `needs_attention`, drift item, seller notification |
 | `InvariantViolation` | Tried to remove a pre_existing member | Abort action, Sentry at error level, never retried |
+| `ConfigurationError` | Missing or malformed required environment variable | Process exits non-zero with a safe message before serving requests |
 
 Rules: never swallow errors, never return raw provider or GitHub error bodies to browsers, always attach `seller_id`, `license_id`, `grant_id`, `job_id` to logs and Sentry context, never log secrets or tokens (pino redaction list is tested).
 
