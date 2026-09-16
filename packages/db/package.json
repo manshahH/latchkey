@@ -10,5 +10,8 @@
     "@latchkey/config": "workspace:*",
     "drizzle-orm": "^0.44.5",
     "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@latchkey/testing": "workspace:*"
   }
 }

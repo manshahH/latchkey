@@ -2,5 +2,11 @@
   "name": "@latchkey/testing",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@testcontainers/postgresql": "^11.11.0"
+  }
 }

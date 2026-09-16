@@ -23,6 +23,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@latchkey/testing": "workspace:*",
     "@eslint/js": "^9.36.0",
     "@types/node": "^24.6.1",
     "drizzle-kit": "^0.31.4",

@@ -30,8 +30,8 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
-**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, and reversible database migration commands. No product behavior, database test harness, or infrastructure yet.
-**Next action:** M0 task 5, add Testcontainers Postgres helpers and prove migrations run up, down, up on a clean database.
+**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, and a real Postgres Testcontainers harness. No product behavior, local Docker Compose stack, or infrastructure yet.
+**Next action:** M0 task 6, add Docker Compose for local Postgres.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** none yet.
@@ -209,6 +209,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M0 task 5 Testcontainers database harness
+- Branch / commits: `main`; direct commits and pushes requested by owner.
+- Goal: test database behavior against isolated real Postgres instead of a mock.
+- Plan: add a PostgreSQL Testcontainers helper, a deterministic fake clock and factory helper, then test migration up, down, up on a new database.
+- Done: added `startPostgres`, `FakeClock`, and a seller factory in `packages/testing`. Added an integration test that starts a fresh `postgres:16-alpine` container, applies the migration, rolls it back, and applies it again.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): Docker Engine 29.6.1 was available. The focused integration test passed in 11.82 seconds. The final `pnpm test` passed 14 test files and 16 tests. Typecheck, lint, and Prettier also passed.
+- Negative tests added and how each was proven non-vacuous: temporarily replacing the down migration with `SELECT 1` caused the Postgres integration test to fail because the schema marker remained. Restoring `DROP TABLE` made the integration test pass.
+- Decisions made: none.
+- Edge cases considered: a new container is created for the test file, test data is removed with the container, repeated migrations are a no-op, and Testcontainers only permits esbuild's build script. Unneeded transitive build scripts are explicitly denied.
+- Problems hit and how solved: strict typing required exporting the test container type and adapting `stop()` to discard the container object it returns. pnpm surfaced unneeded transitive build scripts, which are explicitly set to `false` instead of being approved.
+- Not done / deferred (and why): Docker Compose is the separate next M0 task. The test command will be split into unit and integration scripts when M0 task 7 completes the command suite.
+- Docs updated: current state and this work log.
+- Next step: M0 task 6.
 
 ### 2026-09-16: M0 task 4 reversible database migrations
 - Branch / commits: `main`; direct commits and pushes requested by owner.
