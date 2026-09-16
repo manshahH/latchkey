@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 
-import { providersReady } from "./index.js";
+import { TestProvider } from "./index.js";
 
-test("providers workspace is available", () => {
-  expect(providersReady()).toBe("providers");
+test("test provider rejects an invalid secret", () => {
+  expect(TestProvider.verify("{}", "wrong")).toBeNull();
 });

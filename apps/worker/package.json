@@ -2,5 +2,8 @@
   "name": "@latchkey/worker",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@latchkey/core": "workspace:*"
+  }
 }

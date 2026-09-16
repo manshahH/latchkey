@@ -22,12 +22,7 @@ describe("desiredGrants", () => {
 
   it("keeps pinned registry and download access after updates end", () => {
     expect(
-      desiredGrants(
-        { ...license, status: "updates_ended" },
-        [assignedSeat],
-        deliverables,
-        now
-      )
+      desiredGrants({ ...license, status: "updates_ended" }, [assignedSeat], deliverables, now)
     ).toEqual([
       { deliverableId: "team", desired: "absent", seatId: "seat-1" },
       { deliverableId: "registry", desired: "present", seatId: "seat-1" },

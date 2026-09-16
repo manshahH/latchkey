@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  defaultRevokePolicy,
-  LicenseEventSchema,
-  RevokePolicySchema
-} from "./index.js";
+import { defaultRevokePolicy, LicenseEventSchema, RevokePolicySchema } from "./index.js";
 
 describe("core schemas", () => {
   it("applies the documented default revoke policy", () => {

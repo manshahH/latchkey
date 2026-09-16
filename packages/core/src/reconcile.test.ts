@@ -47,9 +47,7 @@ describe("planReconcile", () => {
     expect(actionTypes("absent", "active", { hasOtherPresentGrants: true })).toEqual([
       "remove_team"
     ]);
-    expect(actionTypes("absent", "active", { hasUnmanagedTeams: true })).toEqual([
-      "remove_team"
-    ]);
+    expect(actionTypes("absent", "active", { hasUnmanagedTeams: true })).toEqual(["remove_team"]);
     expect(actionTypes("absent", "active", { removeFromOrgWhenNoGrants: false })).toEqual([
       "remove_team"
     ]);

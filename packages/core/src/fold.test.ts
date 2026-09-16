@@ -14,7 +14,7 @@ const dateAt = (day: number): Date =>
 const event = (
   type: LicenseEvent["type"],
   day: number,
-  id = `${type}-${day}`
+  id = `${type}-${String(day)}`
 ): LicenseEvent => {
   const base = { id, occurredAt: dateAt(day), receivedAt: dateAt(day) };
 
@@ -130,9 +130,10 @@ describe("foldLicense", () => {
   });
 
   it("ends access after the configured past due grace period", () => {
-    expect(
-      foldLicense([event("SubscriptionPastDue", 1)], defaultRevokePolicy, dateAt(4))
-    ).toEqual({ access: "absent", status: "ended" });
+    expect(foldLicense([event("SubscriptionPastDue", 1)], defaultRevokePolicy, dateAt(4))).toEqual({
+      access: "absent",
+      status: "ended"
+    });
   });
 
   it("honors each configurable policy branch", () => {
@@ -159,9 +160,10 @@ describe("foldLicense", () => {
     });
 
     expect(foldLicense([payment(), partialRefund], policy, dateAt(4)).status).toBe("refunded");
-    expect(
-      foldLicense([payment(), event("DisputeOpened", 2)], policy, dateAt(4))
-    ).toEqual({ access: "present", status: "disputed" });
+    expect(foldLicense([payment(), event("DisputeOpened", 2)], policy, dateAt(4))).toEqual({
+      access: "present",
+      status: "disputed"
+    });
     expect(
       foldLicense([payment(), event("DisputeOpened", 2), disputeWon], policy, dateAt(4))
     ).toEqual({ access: "present", status: "active" });
@@ -188,7 +190,7 @@ describe("foldLicense", () => {
         }),
         (specifications) => {
           const events = specifications.map(([type, day], index) =>
-            event(type, day, `${type}-${index}`)
+            event(type, day, `${type}-${String(index)}`)
           );
           const expected = foldLicense(events, defaultRevokePolicy, dateAt(6));
 

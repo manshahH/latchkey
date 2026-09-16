@@ -69,10 +69,20 @@ importers:
       '@latchkey/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@latchkey/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      hono:
+        specifier: ^4.11.4
+        version: 4.13.8
 
   apps/web: {}
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@latchkey/core':
+        specifier: workspace:*
+        version: link:../../packages/core
 
   packages/config:
     dependencies:
@@ -116,7 +126,14 @@ importers:
         specifier: ^10.3.0
         version: 10.3.1
 
-  packages/providers: {}
+  packages/providers:
+    dependencies:
+      '@latchkey/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
 
   packages/testing:
     dependencies:
@@ -1804,6 +1821,10 @@ packages:
   hasown@2.0.4:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
+
+  hono@4.13.8:
+    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
+    engines: {node: '>=16.9.0'}
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
@@ -4307,6 +4328,8 @@ snapshots:
   hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
+
+  hono@4.13.8: {}
 
   html-escaper@2.0.2: {}
 

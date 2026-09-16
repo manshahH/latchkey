@@ -81,7 +81,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["*", "!zod"],
+              group: ["node:*", "@latchkey/*", "apps/*"],
               message: "packages/core may only import Zod schemas."
             }
           ]

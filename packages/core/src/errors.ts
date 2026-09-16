@@ -2,7 +2,7 @@ export abstract class LatchkeyError extends Error {
   abstract readonly code: string;
   abstract readonly statusCode: number;
 
-  protected constructor(message: string) {
+  public constructor(message: string) {
     super(message);
     this.name = new.target.name;
   }

@@ -1,12 +1,6 @@
-import {
-  type Deliverable,
-  type DesiredGrant,
-  type LicenseForGrants,
-  type Seat
-} from "./types.js";
+import { type Deliverable, type DesiredGrant, type LicenseForGrants, type Seat } from "./types.js";
 
-const isSeatAssigned = (seat: Seat): boolean =>
-  seat.userId !== null && seat.releasedAt === null;
+const isSeatAssigned = (seat: Seat): boolean => seat.userId !== null && seat.releasedAt === null;
 
 const desiredForDeliverable = (
   license: LicenseForGrants,
@@ -23,9 +17,7 @@ const desiredForDeliverable = (
     return deliverable.type === "github_team" ? "absent" : "present";
   }
 
-  return license.status === "active" ||
-    license.status === "grace" ||
-    license.status === "canceling"
+  return license.status === "active" || license.status === "grace" || license.status === "canceling"
     ? "present"
     : "absent";
 };
@@ -39,9 +31,7 @@ export const desiredGrants = (
   seats.flatMap((seat) =>
     deliverables.map((deliverable) => ({
       deliverableId: deliverable.id,
-      desired: isSeatAssigned(seat)
-        ? desiredForDeliverable(license, deliverable, now)
-        : "absent",
+      desired: isSeatAssigned(seat) ? desiredForDeliverable(license, deliverable, now) : "absent",
       seatId: seat.id
     }))
   );

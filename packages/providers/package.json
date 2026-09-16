@@ -2,5 +2,9 @@
   "name": "@latchkey/providers",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@latchkey/core": "workspace:*",
+    "zod": "^3.24.2"
+  }
 }
