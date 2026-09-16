@@ -9,7 +9,13 @@
   "dependencies": {
     "@latchkey/config": "workspace:*",
     "@latchkey/core": "workspace:*",
+    "@latchkey/db": "workspace:*",
     "@latchkey/providers": "workspace:*",
-    "hono": "^4.11.4"
+    "hono": "^4.11.4",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@latchkey/crypto": "workspace:*",
+    "@latchkey/testing": "workspace:*"
   }
 }

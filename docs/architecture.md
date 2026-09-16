@@ -262,6 +262,7 @@ sequenceDiagram
 
 Rules:
 - The HTTP handler does no business logic beyond verify + store + enqueue. It must answer within 2 seconds.
+- The production webhook store lives in `packages/db`. It decrypts `webhook_secret_enc` only while loading the connection for signature verification, then passes only the verified event to the transaction.
 - Unknown product mapping: store the event, mark `process_error = unmapped_product`, create a drift item, do not drop it. When the seller maps the product, reprocess.
 - Test-mode events go only to test-mode connections. Never mix.
 
@@ -366,7 +367,11 @@ Any permission change is a decision entry and requires owner approval, because i
 - List team members: `GET /orgs/{org}/teams/{team_slug}/members`
 - Resolve login from id: `GET /user/{account_id}`
 
-### 8.3 GitHub realities the design depends on
+### 8.3 FakeGitHub contract used in local tests
+
+`FakeGitHub` models the reconciler endpoint contract: organization membership, team membership, pending invitation lookup and cancellation, team-member listing, user-team listing, add and remove operations, invitation expiry, invite caps, transient 503 and rate-limit injection, permanent 404 injection, rename, and deletion. It keys every operation by numeric GitHub user id.
+
+### 8.4 GitHub realities the design depends on
 
 - Org invitations expire after 7 days. We re-invite at day 6.
 - Org invitation creation is capped per 24 hours (lower for young or free organizations, higher for older or paid ones). Track per-org invites sent in a rolling window; queue beyond the budget.
@@ -375,7 +380,7 @@ Any permission change is a decision entry and requires owner approval, because i
 - Usernames change. Always key on numeric id.
 - Respect primary and secondary rate limits: honor `Retry-After` and `x-ratelimit-reset`, back off with jitter, and keep a per-installation concurrency limit (start at 2).
 
-### 8.4 Onboarding checks
+### 8.5 Onboarding checks
 
 When a seller connects an org, run and display:
 1. App installed with the right permissions.
@@ -434,6 +439,7 @@ Where a provider lacks an explicit event, `backfill` must detect the change by p
 - **Idempotency layers:** unique `(source, external_event_id)`; unique `(license_id, external_event_id)` in license_events; grant actions check observed state first; emails deduped by `dedupe_key`.
 - **Retries:** transient errors retry with exponential backoff plus jitter, cap at 12 attempts over about 24 hours, then `needs_attention` + drift item + Sentry. Permanent errors do not retry.
 - **Poison events:** an event that throws during processing is marked with `process_error`, alerted, and never blocks other events. Reprocess via admin command after a fix.
+- **Task ownership:** `process_event` and `reconcile_grant` are Graphile Worker task identifiers. They are the only entry points that call the event processor and reconciler.
 
 ---
 

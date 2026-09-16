@@ -2,7 +2,14 @@ import type { Sql } from "postgres";
 
 type JsonPayload = Parameters<Sql["json"]>[0];
 
-export interface StoredEvent { id: string; sellerId: string; source: string; externalEventId: string; type: string; payload: JsonPayload; }
+export interface StoredEvent {
+  id: string;
+  sellerId: string;
+  source: string;
+  externalEventId: string;
+  type: string;
+  payload: JsonPayload;
+}
 export const storeExternalEvent = async (sql: Sql, event: StoredEvent): Promise<boolean> => {
   const rows = await sql<{ id: string }[]>`
     INSERT INTO external_events (id, seller_id, source, external_event_id, type, payload)

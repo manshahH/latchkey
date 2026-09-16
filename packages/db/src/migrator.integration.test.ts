@@ -46,6 +46,7 @@ test("migrations run up, down, then up on a clean Postgres database", async () =
   expect(await sellersTableExists()).toBe(true);
 
   expect(await rollbackMigration(database.sql)).toBe(true);
+
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(false);
 

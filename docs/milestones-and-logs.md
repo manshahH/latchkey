@@ -12,7 +12,7 @@
 | Planning | DONE | 2026-09-16 | 2026-09-16 | Research, product, architecture, plan written |
 | M0 Foundation | DONE | 2026-09-16 | 2026-09-16 | All scoped foundation tasks complete. D-023 defers three automated guards. |
 | M1 Domain core | DONE | 2026-09-16 | 2026-09-16 | Pure license fold, grant planner, reconciliation planner, errors, and property tests complete. |
-| M2 Events and jobs | IN PROGRESS | 2026-09-16 | | Task 1 schema migration complete. |
+| M2 Events and jobs | DONE | 2026-09-16 | 2026-09-17 | Verified event ingestion, Graphile Worker tasks, reconciler fake, and acceptance matrix complete. |
 | M3 GitHub App | NOT STARTED | | | Needs owner: create GitHub Apps, approve permissions |
 | M4 Payment adapters | NOT STARTED | | | Needs owner: sandbox accounts |
 | M5 Claim and buyer experience | NOT STARTED | | | |
@@ -28,17 +28,16 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 ## 2. Current state (update at the end of every session)
 
-**Last updated:** 2026-09-16
+**Last updated:** 2026-09-17
 **Branch in progress:** `main` (owner requested direct commits).
-**What exists:** M0 foundation plus a pure M1 core package with Zod-normalized license event and revoke policy schemas, deterministic license folding, desired grant planning, safe reconciliation action planning, typed application errors, property tests, and a 95% enforced line-coverage threshold. No database-backed product behavior or external integrations yet.
-**Next action:** M2 task 2, tenant-scoped repositories.
-**Open blockers:** none.
-**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
+**What exists:** M0 and M1 are complete. M2 now has a real Postgres event pipeline: verified test-provider webhooks decrypt their connection secret in `packages/db`, transactionally persist one event, and enqueue Graphile Worker tasks. Worker tasks normalize and refold licenses, derive grants, reconcile against a stateful organization and team FakeGitHub, retry typed transient failures, and create visible drift for permanent failures.
+**Next action:** Begin M3 only after the owner creates the GitHub App and approves its permissions.
+**Open blockers:** none for M2.
+**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation and permission approval (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
 
 ---
-
 ## 3. Decision log
 
 Format:
@@ -219,6 +218,14 @@ Format:
 
 ---
 
+### D-025: Graphile Worker is the sole M2 job executor
+- Date: 2026-09-17
+- Status: Accepted
+- Decided by: agent
+- Context: the partial M2 implementation still used direct processor calls and an interim local queue, which conflicts with D-012 and does not prove transactional Graphile retry behavior.
+- Decision: API transactions call `graphile_worker.add_job`; only Graphile task handlers call the event processor and reconciler. Acceptance tests run those handlers through a real Graphile Worker database.
+- Alternatives: keep the interim local queue or call processors directly in tests. Both bypass the production retry and job-key behavior.
+- Consequences: all event state changes have a durable Graphile job path, and the worker package owns task registration.
 ## 4. Work log
 
 Format (newest first):
@@ -237,6 +244,30 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-17: M2 events and jobs complete
+- Branch / commits: `main`; final local commits follow this completed verification.
+- Goal: finish the durable webhook, Graphile Worker, processor, reconciler, FakeGitHub, production store, and acceptance coverage required for M2.
+- Plan: replace direct processor execution with real Graphile Worker tasks, wire the API to encrypted database connection secrets, complete the organization and team fake contract, add the acceptance matrix, then run migrations and the full quality gate.
+- Done: Graphile Worker now owns `process_event` and `reconcile_grant` execution. Verified webhooks use a database production store that decrypts `webhook_secret_enc` only for verification and transactionally enqueues the event task. The reconciler uses organization, team, invitation, team-list, and membership operations from FakeGitHub, handles retryable 503s, records permanent 404 failures as `needs_attention` plus a drift item, and remains idempotent after a post-GitHub-call crash. The real Postgres acceptance suite sends events through Graphile tasks only.
+- Proof: focused Graphile acceptance test passed 1 file and 5 tests: five duplicates produce one event, license, and invite; refund then payment remains refunded without access; crash recovery sends one invite; injected 503 retries successfully; injected 404 creates attention and drift. Production API test passed 1 file and 1 test: invalid signature returns 401, writes zero events, and increments `webhook_signature_invalid{provider=test}`. Seller isolation test passed 1 file and 1 test. Clean migration up, down, up test passed 1 file and 1 test. The final `pnpm check` passed: 18 unit files and 48 tests, 5 core coverage files and 32 tests at 97.18% lines, 4 real-Postgres integration files and 8 tests, 1 browser test, TypeScript build, and Prettier check.
+- Negative tests added and how each was proven non-vacuous: changing the webhook rejection condition made the signature test return 500 instead of 401. Removing `seller_id` from the product update made seller B's mutation resolve instead of returning NotFoundError. Both changes were restored and their tests passed again.
+- Decisions made: D-025.
+- Edge cases considered: duplicate delivery, refund arriving before payment, post-side-effect worker crash, transient and permanent GitHub failures, encrypted webhook secret handling, numeric GitHub identity conversion from Postgres bigint values, invitation expiry, invite caps, renamed and deleted users, and seller isolation. The M2 reconciler does not implement scheduled sweep or invite watchdog jobs, which remain M3 work.
+- Problems hit and how solved: Graphile Worker 0.18 exposes `jobs` as a view, so the test harness uses its documented private jobs table only to make Graphile-scheduled retries immediately runnable in the deterministic test. The Postgres driver requires string timestamps for prepared timestamptz parameters, so database writes use UTC ISO strings.
+- Docs updated: status board, current state, architecture notes, decision log, and this entry.
+- Next step: commit the verified M2 completion, then request owner approval before pushing `origin/main`.
+### 2026-09-16: M2 partial persistence and FakeGitHub implementation
+- Branch / commits: `main`; no commit created because the milestone is not ready.
+- Goal: close the M2 persistence, webhook, worker, reconciliation, and FakeGitHub gaps.
+- Done: added a seller-filtered product repository proof, a transactional external-event plus stable job-key helper, verified webhook boundary, event refold processor, reconciliation skeleton, retry dispatcher, reversible job migration, and a stateful FakeGitHub with expiry, cap, failure, rename, deletion, and call tracking behavior.
+- Proof: focused M2 unit tests passed 5 files and 6 tests. Full unit tests passed 18 files and 48 tests. Core coverage passed at 97.18% lines. Lint, typecheck, build, and diff whitespace checks passed.
+- Negative tests added and how each was proven non-vacuous: the webhook test asserts a bad signature returns 401 and invokes no persistence. The Postgres isolation test was added, but the Testcontainers run did not reach a completed report in this session, so it is not proof yet.
+- Decisions made: none. The local job queue is explicitly not an accepted replacement for Graphile Worker.
+- Edge cases considered: duplicate keys, invitation expiry, 429 and 5xx errors, deleted and renamed users, permanent failures, and idempotent observe-first reconciliation. End-to-end duplicate, refund ordering, crash recovery, and permanent failure acceptance coverage remains incomplete.
+- Problems hit and how solved: the normal patch helper was unavailable, so equivalent workspace patches were applied through the shell. Integration test execution did not return a completed Testcontainers report.
+- Not done / deferred (and why): Graphile Worker setup, production-grade repository coverage, database-backed webhook wiring, processor and reconciler acceptance tests, migration proof, docs completion, commit, and push are all still required. The current local queue conflicts with D-012 and must be replaced.
+- Docs updated: status current state and this work log.
+- Next step: use Graphile Worker as specified, then finish the full M2 acceptance matrix.
 ### 2026-09-16: M2 task 1 reversible events and jobs schema
 - Branch / commits: `main`; direct commits requested by owner.
 - Goal: establish every M2 persistence table before adding state-changing application code.

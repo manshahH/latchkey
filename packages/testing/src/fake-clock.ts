@@ -9,6 +9,10 @@ export class FakeClock {
     this.currentTime = new Date(this.currentTime.getTime() + minutes * 60_000);
   }
 
+  public advanceDays(days: number): void {
+    this.advanceMinutes(days * 24 * 60);
+  }
+
   public now(): Date {
     return new Date(this.currentTime);
   }

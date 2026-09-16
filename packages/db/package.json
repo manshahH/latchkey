@@ -8,8 +8,12 @@
   },
   "dependencies": {
     "@latchkey/config": "workspace:*",
+    "@latchkey/core": "workspace:*",
+    "@latchkey/github": "workspace:*",
     "drizzle-orm": "^0.44.5",
-    "postgres": "^3.4.7"
+    "graphile-worker": "^0.18.0",
+    "postgres": "^3.4.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@latchkey/testing": "workspace:*"
