@@ -15,17 +15,23 @@ export const createLocalKms = (key = randomBytes(keyLength)): KeyEncryptionServi
       const iv = randomBytes(12);
       const cipher = createCipheriv(algorithm, key, iv);
       const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-      return [iv, cipher.getAuthTag(), encrypted].map((part) => part.toString("base64url")).join(".");
+      return [iv, cipher.getAuthTag(), encrypted]
+        .map((part) => part.toString("base64url"))
+        .join(".");
     },
     decrypt: (ciphertext) => {
       const [ivValue, tagValue, encryptedValue] = ciphertext.split(".");
       if (!ivValue || !tagValue || !encryptedValue) throw new Error("Invalid ciphertext.");
       const decipher = createDecipheriv(algorithm, key, Buffer.from(ivValue, "base64url"));
       decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
-      return Buffer.concat([decipher.update(Buffer.from(encryptedValue, "base64url")), decipher.final()]).toString("utf8");
+      return Buffer.concat([
+        decipher.update(Buffer.from(encryptedValue, "base64url")),
+        decipher.final()
+      ]).toString("utf8");
     }
   };
 };
 
 export const createToken = (): string => randomBytes(32).toString("base64url");
-export const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
+export const hashToken = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
