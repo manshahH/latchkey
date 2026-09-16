@@ -13,6 +13,11 @@ const migrations: readonly Migration[] = [
     downFile: new URL("../migrations/0000_bootstrap_schema_marker.down.sql", import.meta.url),
     id: "0000_bootstrap_schema_marker",
     upFile: new URL("../migrations/0000_bootstrap_schema_marker.sql", import.meta.url)
+  },
+  {
+    downFile: new URL("../migrations/0001_events_and_jobs.down.sql", import.meta.url),
+    id: "0001_events_and_jobs",
+    upFile: new URL("../migrations/0001_events_and_jobs.sql", import.meta.url)
   }
 ];
 

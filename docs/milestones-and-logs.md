@@ -12,7 +12,7 @@
 | Planning | DONE | 2026-09-16 | 2026-09-16 | Research, product, architecture, plan written |
 | M0 Foundation | DONE | 2026-09-16 | 2026-09-16 | All scoped foundation tasks complete. D-023 defers three automated guards. |
 | M1 Domain core | DONE | 2026-09-16 | 2026-09-16 | Pure license fold, grant planner, reconciliation planner, errors, and property tests complete. |
-| M2 Events and jobs | NOT STARTED | | | |
+| M2 Events and jobs | IN PROGRESS | 2026-09-16 | | Task 1 schema migration complete. |
 | M3 GitHub App | NOT STARTED | | | Needs owner: create GitHub Apps, approve permissions |
 | M4 Payment adapters | NOT STARTED | | | Needs owner: sandbox accounts |
 | M5 Claim and buyer experience | NOT STARTED | | | |
@@ -31,7 +31,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
 **What exists:** M0 foundation plus a pure M1 core package with Zod-normalized license event and revoke policy schemas, deterministic license folding, desired grant planning, safe reconciliation action planning, typed application errors, property tests, and a 95% enforced line-coverage threshold. No database-backed product behavior or external integrations yet.
-**Next action:** Start M2 task 1, production data migrations and tenant-scoped repositories.
+**Next action:** M2 task 2, tenant-scoped repositories.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
@@ -236,6 +236,13 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M2 task 1 reversible events and jobs schema
+- Branch / commits: `main`; direct commits requested by owner.
+- Goal: establish every M2 persistence table before adding state-changing application code.
+- Done: added all planned seller, identity, connection, product, license, grant, event, activity, drift, email, and audit tables with foreign keys, uniqueness constraints, and seller lookup indexes.
+- Proof: the dedicated clean Postgres integration test applied both migrations, rolled back the M2 schema, reapplied it, and confirmed the `sellers` table appears and disappears as expected.
+- Next step: tenant-scoped repositories and webhook event storage.
 
 ### 2026-09-16: M1 complete pure domain core
 - Branch / commits: `main`; direct commits and pushes requested by owner.
