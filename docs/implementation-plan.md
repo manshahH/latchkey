@@ -51,17 +51,14 @@ Estimates assume one developer working with an AI agent. They are rough.
 5. `packages/testing`: Testcontainers Postgres helper with a fresh database per test file, `FakeClock`, factory helpers.
 6. docker compose for local Postgres.
 7. Scripts: `lint`, `typecheck`, `test` (unit), `test:integration`, `test:e2e` (placeholder Playwright smoke), `build`, `check` (runs all of them in order).
-8. Min-test guard: `scripts/ci-guard.ts` fails if passing test count is below `LATCHKEY_MIN_TESTS` (prevents "all skipped, exit 0").
-9. GitHub Actions CI running `pnpm check` on every push and PR.
-10. Em dash check: script that fails CI if an em dash (U+2014) or en dash (U+2013) appears in `docs/`, UI copy, or email templates.
-11. Pino logger with redaction list (`*.secret`, `*.token`, `authorization`, `*_enc`, `cookie`) and a test proving redaction.
+8. Pino logger with redaction for secret, token, authorization, cookie, and encrypted fields, plus a test proving redaction.
+
+The owner deferred the minimum-test guard, GitHub Actions CI, and automated em dash check from M0 in D-023. The no em dash writing rule remains a style rule, but M0 does not add a mechanical check for it.
 
 **Acceptance criteria**
-- `pnpm check` passes locally and in CI (paste the CI run link or id in the log).
+- `pnpm check` passes locally.
 - A migration can be applied, rolled back, and re-applied on a clean DB (`up/down/up` script exits 0).
 - Booting api with a missing required env var exits non-zero with a clear message.
-- CI fails when a test is skipped below the floor (prove by setting floor above current count once).
-- CI fails when an em dash is added to a doc (prove once, then revert).
 - Logger test shows a secret field is printed as `[REDACTED]`.
 
 **Out of scope:** any business tables, auth, UI beyond a hello page.

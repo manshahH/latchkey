@@ -10,7 +10,7 @@
 | Milestone | Status | Started | Finished | Notes |
 |---|---|---|---|---|
 | Planning | DONE | 2026-09-16 | 2026-09-16 | Research, product, architecture, plan written |
-| M0 Foundation | IN PROGRESS | 2026-09-16 | | Task 1 complete: workspace tooling |
+| M0 Foundation | DONE | 2026-09-16 | 2026-09-16 | All scoped foundation tasks complete. D-023 defers three automated guards. |
 | M1 Domain core | NOT STARTED | | | |
 | M2 Events and jobs | NOT STARTED | | | |
 | M3 GitHub App | NOT STARTED | | | Needs owner: create GitHub Apps, approve permissions |
@@ -30,12 +30,12 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
-**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, a real Postgres Testcontainers harness, and local Docker Compose Postgres on port 15432. No product behavior or infrastructure yet.
-**Next action:** M0 task 7, add the e2e smoke and build commands, then complete the full check sequence.
+**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, ten shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, a real Postgres Testcontainers harness, local Docker Compose Postgres on port 15432, a Playwright Chromium smoke test, an emitted TypeScript build, and structured Pino logging with tested secret redaction. No product behavior or infrastructure yet.
+**Next action:** Start M1 task 1, the pure domain types and schemas.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
-**Known debt:** none yet.
-**Test count floor (`LATCHKEY_MIN_TESTS`):** not set yet (set in M0).
+**Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
+**Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
 
 ---
 
@@ -199,6 +199,15 @@ Format:
 - Alternatives: use host ports 5432 or 5433 (already occupied by local PostgreSQL); require every developer to stop their local service (unfriendly and unnecessary).
 - Consequences: `.env.example` and Drizzle's local fallback use port 15432.
 
+### D-023: Defer automated repository guards from M0
+- Date: 2026-09-16
+- Status: Accepted
+- Decided by: owner
+- Context: the owner requested that M0 exclude the minimum-test guard, GitHub Actions workflow, and automated em dash check.
+- Decision: M0 will not add those three checks. D-017 remains the writing rule, but M0 does not enforce it mechanically.
+- Alternatives: add all three repository guards in M0.
+- Consequences: `pnpm check` remains the local quality gate and does not include those deferred checks. Reassess automation before beta.
+
 ---
 
 ## 4. Work log
@@ -218,6 +227,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M0 complete command suite and secure logging
+- Branch / commits: `main`; direct commits and pushes requested by owner.
+- Goal: finish the remaining M0 foundation by adding a browser smoke test, emitted build command, and safe structured logging, while honoring the owner's request to omit the three automated repository guards.
+- Plan: add Playwright Chromium smoke coverage, emit TypeScript build artifacts, add a focused Pino package with redaction tests, update the plan for the approved scope change, then run the complete check.
+- Done: added `pnpm test:e2e`, `pnpm build`, and a `pnpm check` sequence that runs lint, typecheck, unit tests, integration tests, browser smoke, build, and formatting in order. Added `@latchkey/logging` with Pino redaction for secret, token, authorization, cookie, and common encrypted fields. Added a browser smoke that renders the M0 placeholder page and a test that proves sensitive values never reach the log destination. Added D-023 and completed the scoped M0 plan.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): `pnpm test:e2e` passed 1 Chromium browser test. `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` passed, with 14 unit files and 16 unit tests. `pnpm check` exited 0 after lint, typecheck, unit, Postgres integration, browser, build, and formatting checks. The earlier M0 Compose proof ran `pnpm db:migrate`, `pnpm db:rollback`, and `pnpm db:migrate` successfully against a clean local database. No CI workflow exists by owner decision D-023.
+- Negative tests added and how each was proven non-vacuous: removing root `secret` from the Pino redaction list made the logger test fail because `top-secret` appeared in the captured log entry. Restoring the path made the test pass.
+- Decisions made: D-023.
+- Edge cases considered: Playwright needs its matching headless Chromium runtime, so it was installed and the real smoke was run. The smoke is intentionally a direct placeholder render because the Next.js application is not in scope until later milestones. Root and nested sensitive fields are both covered in the logger test. The logger currently lists common encrypted field names; new sensitive fields must be added with their code.
+- Problems hit and how solved: the first Playwright installation did not include the headless shell. Installing the matching Chromium runtime resolved it. Pino's redaction paths require a mutable array under strict TypeScript, so the list is typed as `string[]`.
+- Not done / deferred (and why): minimum-test guard, GitHub Actions workflow, and automated em dash check are deferred from M0 at the owner's request in D-023.
+- Docs updated: architecture layout, M0 plan, status board, current state, decision log, and this work log.
+- Next step: M1 task 1, pure domain types and schemas.
 
 ### 2026-09-16: M0 task 7 split unit and integration commands
 - Branch / commits: `main`; direct commits and pushes requested by owner.

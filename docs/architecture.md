@@ -114,6 +114,7 @@ Changing any row requires a decision entry.
 │   ├── crypto/               envelope encryption, token hashing
 │   ├── email/                EmailSender interface + templates
 │   ├── config/               env parsing with Zod, fails fast on boot
+│   ├── logging/              structured Pino logger with secret redaction
 │   └── testing/              fakes (FakeGitHub, FakeClock, provider fixtures), factories
 ├── infra/                    CDK app
 └── fixtures/
