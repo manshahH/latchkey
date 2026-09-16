@@ -121,7 +121,7 @@ Changing any row requires a decision entry.
     └── webhooks/<provider>/  real sandbox payloads with signatures, captured not hand-written
 ```
 
-**Dependency rule:** `core` depends on nothing. `apps/*` depend on packages. Packages never import from `apps`. Lint enforces this.
+**Dependency rule:** `core` is pure and may import only Zod for schema definitions. It has no I/O dependencies. `apps/*` depend on packages. Packages never import from `apps`. Lint enforces this.
 
 ---
 

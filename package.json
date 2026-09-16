@@ -12,6 +12,7 @@
     "lint": "eslint --no-error-on-unmatched-pattern \"apps/**/*.{js,mjs,cjs,ts,mts,cts}\" \"packages/**/*.{js,mjs,cjs,ts,mts,cts}\" \"infra/**/*.{js,mjs,cjs,ts,mts,cts}\" \"scripts/**/*.{js,mjs,cjs,ts,mts,cts}\"",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
+    "test:core:coverage": "vitest run packages/core/src --coverage.enabled --coverage.provider=v8 --coverage.include=packages/core/src/**/*.ts --coverage.exclude=packages/core/src/**/*.test.ts --coverage.thresholds.lines=95",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "build": "tsc --project tsconfig.build.json",
@@ -20,7 +21,7 @@
     "db:reset": "tsx packages/db/src/cli.ts reset",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm test:e2e && pnpm build && pnpm format:check"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:core:coverage && pnpm test:integration && pnpm test:e2e && pnpm build && pnpm format:check"
   },
   "dependencies": {
     "zod": "^3.24.2"
@@ -28,12 +29,14 @@
   "devDependencies": {
     "@latchkey/testing": "workspace:*",
     "@playwright/test": "^1.57.0",
+    "@vitest/coverage-v8": "^3.2.4",
     "@eslint/js": "^9.36.0",
     "@types/node": "^24.6.1",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
+    "fast-check": "^4.3.0",
     "globals": "^16.4.0",
     "prettier": "^3.6.2",
     "turbo": "^2.5.8",

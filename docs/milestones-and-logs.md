@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | Planning | DONE | 2026-09-16 | 2026-09-16 | Research, product, architecture, plan written |
 | M0 Foundation | DONE | 2026-09-16 | 2026-09-16 | All scoped foundation tasks complete. D-023 defers three automated guards. |
-| M1 Domain core | NOT STARTED | | | |
+| M1 Domain core | DONE | 2026-09-16 | 2026-09-16 | Pure license fold, grant planner, reconciliation planner, errors, and property tests complete. |
 | M2 Events and jobs | NOT STARTED | | | |
 | M3 GitHub App | NOT STARTED | | | Needs owner: create GitHub Apps, approve permissions |
 | M4 Payment adapters | NOT STARTED | | | Needs owner: sandbox accounts |
@@ -30,8 +30,8 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
-**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, ten shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, a real Postgres Testcontainers harness, local Docker Compose Postgres on port 15432, a Playwright Chromium smoke test, an emitted TypeScript build, and structured Pino logging with tested secret redaction. No product behavior or infrastructure yet.
-**Next action:** Start M1 task 1, the pure domain types and schemas.
+**What exists:** M0 foundation plus a pure M1 core package with Zod-normalized license event and revoke policy schemas, deterministic license folding, desired grant planning, safe reconciliation action planning, typed application errors, property tests, and a 95% enforced line-coverage threshold. No database-backed product behavior or external integrations yet.
+**Next action:** Start M2 task 1, production data migrations and tenant-scoped repositories.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
@@ -208,6 +208,15 @@ Format:
 - Alternatives: add all three repository guards in M0.
 - Consequences: `pnpm check` remains the local quality gate and does not include those deferred checks. Reassess automation before beta.
 
+### D-024: Allow Zod schemas in the pure core package
+- Date: 2026-09-16
+- Status: Accepted
+- Decided by: agent
+- Context: M1 requires Zod schemas for normalized domain input, while the original repository rule said `packages/core` imports nothing.
+- Decision: `packages/core` may import Zod only for schemas. It remains deterministic and has no I/O dependencies. ESLint rejects other core imports and package metadata declares only Zod.
+- Alternatives: hand-written validators (duplicates schema behavior and conflicts with the M1 task); move schemas outside core (splits pure domain input from its logic).
+- Consequences: domain schemas live beside pure state logic. New core dependencies require a new decision.
+
 ---
 
 ## 4. Work log
@@ -227,6 +236,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M1 complete pure domain core
+- Branch / commits: `main`; direct commits and pushes requested by owner.
+- Goal: build the deterministic domain layer that turns normalized license events into safe access decisions without any database or network I/O.
+- Plan: add Zod domain schemas and default policy, implement the fold, desired grants, reconcile action planner, and typed errors, then prove order independence, removal safety, and coverage.
+- Done: added normalized license event and revoke policy schemas, all documented license statuses, `foldLicense`, `desiredGrants`, `planReconcile`, and seven application error classes. The reconciliation planner only returns `remove_org` when provenance is `added_by_us`, the policy allows it, and there are no other present grants or unmanaged teams. Added fast-check property tests and made the core line coverage gate part of `pnpm check`.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): focused core tests passed 5 files and 32 tests. `pnpm test:core:coverage` passed with 96.66% lines, 93.51% branches, and 100% functions. `pnpm check` passed with the new core coverage gate plus integration, browser, build, and formatting checks. No CI workflow exists by owner decision D-023.
+- Negative tests added and how each was proven non-vacuous: dispute won remains `disputed` with absent access by default; partial refunds retain access by default; grace expires to `ended`. Removing the `added_by_us` provenance condition caused the direct safety test and the fast-check property test to fail with a `pre_existing` counterexample. Restoring it made the suite pass.
+- Decisions made: D-024.
+- Edge cases considered: events are sorted by occurred time, received time, then id, so every tested permutation yields the same state. Refunds, disputes, grace expiration, cancellation timing, update windows, unassigned seats, released seats, pre-existing members, pending invitations we did not create, unmanaged teams, and other grants are all covered.
+- Problems hit and how solved: the original coverage command ran all workspace tests while measuring only core files. It now targets the core suite directly and is included in the full check.
+- Not done / deferred (and why): database persistence, job execution, external calls, and real provider payloads begin in M2 by design.
+- Docs updated: architecture dependency rule, status board, current state, decision log, and this work log.
+- Next step: M2 task 1, migrations and tenant-scoped repositories.
 
 ### 2026-09-16: M0 complete command suite and secure logging
 - Branch / commits: `main`; direct commits and pushes requested by owner.
