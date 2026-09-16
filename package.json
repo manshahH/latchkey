@@ -12,12 +12,13 @@
     "lint": "eslint --no-error-on-unmatched-pattern \"apps/**/*.{js,mjs,cjs,ts,mts,cts}\" \"packages/**/*.{js,mjs,cjs,ts,mts,cts}\" \"infra/**/*.{js,mjs,cjs,ts,mts,cts}\" \"scripts/**/*.{js,mjs,cjs,ts,mts,cts}\"",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:migrate": "tsx packages/db/src/cli.ts migrate",
     "db:rollback": "tsx packages/db/src/cli.ts rollback",
     "db:reset": "tsx packages/db/src/cli.ts reset",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm format:check"
   },
   "dependencies": {
     "zod": "^3.24.2"

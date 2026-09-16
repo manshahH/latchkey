@@ -31,7 +31,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
 **What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, a real Postgres Testcontainers harness, and local Docker Compose Postgres on port 15432. No product behavior or infrastructure yet.
-**Next action:** M0 task 7, complete the command suite for integration tests, e2e smoke, build, and the full check sequence.
+**Next action:** M0 task 7, add the e2e smoke and build commands, then complete the full check sequence.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** none yet.
@@ -218,6 +218,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M0 task 7 split unit and integration commands
+- Branch / commits: `main`; direct commits and pushes requested by owner.
+- Goal: keep ordinary feedback fast while running Docker-backed database tests explicitly and in the full check.
+- Plan: make Vitest discover only Latchkey tests, exclude integration tests from the unit command, add an integration configuration with fixed timeouts and no retries, then include both commands in `pnpm check`.
+- Done: added `pnpm test:integration`, separate Vitest configurations, and a full check sequence that runs lint, typecheck, unit tests, integration tests, and formatting.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): `pnpm test` passed 13 files and 15 tests without Docker. `pnpm test:integration` passed the Postgres migration test. The full check was run with both test layers. No CI workflow exists yet.
+- Negative tests added and how each was proven non-vacuous: no new policy gate. The first explicit include pattern accidentally discovered dependency tests under workspace `node_modules`; excluding that path reduced the unit command to the expected 15 Latchkey tests.
+- Decisions made: none.
+- Edge cases considered: dependency test files are never collected, integration tests retain a 120-second timeout for first image pulls, and retries remain zero in both layers.
+- Problems hit and how solved: Vitest include globs matched nested workspace dependencies. Added explicit `node_modules` exclusions to both configurations.
+- Not done / deferred (and why): M0 task 7 still needs a real build command and a Playwright e2e smoke command, which require the app scaffolds to grow beyond placeholder exports.
+- Docs updated: current state and this work log.
+- Next step: M0 task 7 build and e2e commands.
 
 ### 2026-09-16: M0 task 6 local Docker Compose Postgres
 - Branch / commits: `main`; direct commits and pushes requested by owner.
