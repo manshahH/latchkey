@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 
-import { dbReady } from "./index.js";
+import { migrationIds } from "./index.js";
 
-test("db workspace is available", () => {
-  expect(dbReady()).toBe("db");
+test("declares the bootstrap migration", () => {
+  expect(migrationIds).toEqual(["0000_bootstrap_schema_marker"]);
 });

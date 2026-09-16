@@ -30,8 +30,8 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
-**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, and API fail-fast boot behavior. No product behavior, database, or infrastructure yet.
-**Next action:** M0 task 4, implement Drizzle, migrations with up and down support, and local database commands.
+**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, and reversible database migration commands. No product behavior, database test harness, or infrastructure yet.
+**Next action:** M0 task 5, add Testcontainers Postgres helpers and prove migrations run up, down, up on a clean database.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** none yet.
@@ -209,6 +209,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M0 task 4 reversible database migrations
+- Branch / commits: `main`; direct commits and pushes requested by owner.
+- Goal: add the typed Postgres layer and a reversible migration runner before any business tables exist.
+- Plan: configure Drizzle and the Postgres driver, add a bootstrap schema marker migration with an explicit down migration, expose migrate, rollback, and reset commands, and keep command configuration fail-fast.
+- Done: added Drizzle schema configuration, `packages/db` client creation, migration tracking, one bootstrap migration with a matching down migration, and `pnpm db:migrate`, `pnpm db:rollback`, and `pnpm db:reset` commands.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): lint and strict typecheck passed. Vitest passed 13 files and 14 tests. Prettier passed. `pnpm db:migrate` with no configuration exited non-zero with `LATCHKEY_DATABASE_URL is required`, before attempting a connection.
+- Negative tests added and how each was proven non-vacuous: no new policy gate. The migration command uses the proven M0 task 3 configuration gate; missing configuration was executed and failed safely.
+- Decisions made: none.
+- Edge cases considered: repeated migrate calls only apply unapplied migration ids; rollback with no migration is a no-op; reset rolls all known migrations back before applying them again; database credentials are never printed by the command.
+- Problems hit and how solved: Drizzle's optional driver declarations caused third-party type errors. `skipLibCheck` now skips dependency declarations while strict typechecking remains enabled for Latchkey code. Lint rules now resolve runtime dependencies from each package and shared test tools from the root workspace.
+- Not done / deferred (and why): a clean Postgres up, down, up run is deferred to M0 task 5 because it requires the Testcontainers helper. No business tables are introduced until M2.
+- Docs updated: current state and this work log.
+- Next step: M0 task 5.
 
 ### 2026-09-16: M0 task 3 fail-fast configuration
 - Branch / commits: `main`; initial foundation commit `b3ca1ba` is pushed to `origin/main`. Owner explicitly requested direct commits on `main`.

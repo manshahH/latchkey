@@ -40,8 +40,7 @@ export default tseslint.config(
       "import/no-extraneous-dependencies": [
         "error",
         {
-          devDependencies: ["**/*.test.*", "**/*.config.*"],
-          packageDir: import.meta.dirname
+          devDependencies: ["**/*.config.*"]
         }
       ],
       "no-restricted-imports": [
@@ -57,6 +56,18 @@ export default tseslint.config(
               message: "Packages must not import applications."
             }
           ]
+        }
+      ]
+    }
+  },
+  {
+    files: ["**/*.test.{ts,mts,cts}"],
+    rules: {
+      "import/no-extraneous-dependencies": [
+        "error",
+        {
+          devDependencies: true,
+          packageDir: import.meta.dirname
         }
       ]
     }

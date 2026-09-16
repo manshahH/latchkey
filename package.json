@@ -12,6 +12,9 @@
     "lint": "eslint --no-error-on-unmatched-pattern \"apps/**/*.{js,mjs,cjs,ts,mts,cts}\" \"packages/**/*.{js,mjs,cjs,ts,mts,cts}\" \"infra/**/*.{js,mjs,cjs,ts,mts,cts}\" \"scripts/**/*.{js,mjs,cjs,ts,mts,cts}\"",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
+    "db:migrate": "tsx packages/db/src/cli.ts migrate",
+    "db:rollback": "tsx packages/db/src/cli.ts rollback",
+    "db:reset": "tsx packages/db/src/cli.ts reset",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
@@ -22,6 +25,7 @@
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/node": "^24.6.1",
+    "drizzle-kit": "^0.31.4",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",

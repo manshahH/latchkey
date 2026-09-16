@@ -1,1 +1,2 @@
-export const dbReady = (): string => "db";
+export { createDatabase } from "./client.js";
+export { applyMigrations, migrationIds, resetMigrations, rollbackMigration } from "./migrator.js";
