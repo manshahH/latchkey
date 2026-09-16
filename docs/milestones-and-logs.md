@@ -30,8 +30,8 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-16
 **Branch in progress:** `main` (owner requested direct commits).
-**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, and a real Postgres Testcontainers harness. No product behavior, local Docker Compose stack, or infrastructure yet.
-**Next action:** M0 task 6, add Docker Compose for local Postgres.
+**What exists:** pnpm workspace tooling, strict TypeScript, Turbo task definitions, ESLint import boundaries, Prettier, Vitest, three application workspaces, nine shared package workspaces, validated environment configuration, API fail-fast boot behavior, Drizzle schema setup, reversible database migration commands, a real Postgres Testcontainers harness, and local Docker Compose Postgres on port 15432. No product behavior or infrastructure yet.
+**Next action:** M0 task 7, complete the command suite for integration tests, e2e smoke, build, and the full check sequence.
 **Open blockers:** none.
 **Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation (blocks M3), provider sandbox accounts (blocks M4).
 **Known debt:** none yet.
@@ -190,6 +190,15 @@ Format:
 - Alternatives: legacy ESLint configuration (older configuration model); TypeScript project references alone (cannot enforce import direction).
 - Consequences: each new package must have a tsconfig that ESLint can discover.
 
+### D-022: Map local Compose Postgres to host port 15432
+- Date: 2026-09-16
+- Status: Accepted
+- Decided by: agent
+- Context: local development machines commonly already run PostgreSQL on host port 5432. The container continues to use its standard internal port.
+- Decision: Docker Compose maps the Latchkey local Postgres service from host port 15432 to container port 5432.
+- Alternatives: use host ports 5432 or 5433 (already occupied by local PostgreSQL); require every developer to stop their local service (unfriendly and unnecessary).
+- Consequences: `.env.example` and Drizzle's local fallback use port 15432.
+
 ---
 
 ## 4. Work log
@@ -209,6 +218,20 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-16: M0 task 6 local Docker Compose Postgres
+- Branch / commits: `main`; direct commits and pushes requested by owner.
+- Goal: give developers one local Postgres service that matches the database commands and does not interfere with existing databases.
+- Plan: add a health-checked Postgres 16 Compose service, choose a free host port, validate Compose, and run migration up, down, up against it.
+- Done: added `docker-compose.yml` with Postgres 16, persistent local storage, and a health check. The service maps host port 15432 to container port 5432. Updated the local configuration template and Drizzle fallback URL.
+- Proof (commands run and results, test counts, CI run id, screenshots paths): `docker compose config --quiet` passed. `docker compose up -d postgres` started the service. With the documented local configuration, `pnpm db:migrate`, `pnpm db:rollback`, and `pnpm db:migrate` all exited 0 against Compose. The project lint, typecheck, and test sequence was also run.
+- Negative tests added and how each was proven non-vacuous: no new policy gate. Attempts against occupied host ports 5432 and 5433 reached unrelated local PostgreSQL services and failed authentication, proving that the Compose port must be explicit and conflict-free.
+- Decisions made: D-022.
+- Edge cases considered: host ports 5432 and 5433 were occupied, container port 5432 remains standard, and the named volume persists developer data across `docker compose down` without `-v`.
+- Problems hit and how solved: the environment had existing PostgreSQL listeners on 5432 and 5433. Port 15432 was checked as free and successfully used for the Compose service.
+- Not done / deferred (and why): build, e2e smoke, integration script routing, min-test guard, CI, em dash guard, and logging remain separate M0 tasks.
+- Docs updated: `.env.example`, Drizzle config, decision log, current state, and this work log.
+- Next step: M0 task 7.
 
 ### 2026-09-16: M0 task 5 Testcontainers database harness
 - Branch / commits: `main`; direct commits and pushes requested by owner.

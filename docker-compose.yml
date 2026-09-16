@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: latchkey
+      POSTGRES_PASSWORD: latchkey
+      POSTGRES_USER: latchkey
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U latchkey -d latchkey"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "15432:5432"
+    volumes:
+      - latchkey_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  latchkey_postgres_data:
