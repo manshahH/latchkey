@@ -23,13 +23,14 @@ LATCHKEY_GITHUB_WEBHOOK_SECRET=<random secret of at least 32 characters>
 LATCHKEY_GITHUB_LIVE_ORGANIZATION=latchkey-test-manshah
 LATCHKEY_GITHUB_LIVE_TEAM=latchkey-test
 LATCHKEY_GITHUB_LIVE_USER_ID=<numeric GitHub user ID>
+LATCHKEY_GITHUB_LIVE_INVITEE_LOGIN=<external test user login>
 ```
 
 ## Live contract test
 
 `pnpm test:github-live` uses the App private key, discovers the installation, removes the configured pre-existing member from the disposable team, verifies their organization membership remains, and restores team membership.
 
-To prove the invite acceptance path, use a second existing GitHub account that is not an organization member. Configure its numeric ID as `LATCHKEY_GITHUB_LIVE_INVITEE_ID`, run `pnpm test:github-live:invite`, accept the GitHub email invitation while signed in to that account, then run `pnpm test:github-live:verify`. Do not use a seller, buyer, production organization, or real product team for this test.
+To prove the invite acceptance path, use a second existing GitHub account that is not an organization member. Configure its numeric ID as `LATCHKEY_GITHUB_LIVE_INVITEE_ID` and login as `LATCHKEY_GITHUB_LIVE_INVITEE_LOGIN`. The manual scripts use the connected organization-owner GitHub CLI only to distinguish pending, active, and removed team membership states., run `pnpm test:github-live:invite`, accept the GitHub email invitation while signed in to that account, then run `pnpm test:github-live:verify`. Do not use a seller, buyer, production organization, or real product team for this test.
 
 ## If the App is uninstalled
 

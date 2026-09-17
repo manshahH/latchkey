@@ -184,11 +184,12 @@ export class GitHubAppClient implements GitHubClient {
   public async getPendingInvitation(target: TeamTarget, userId: bigint): Promise<boolean> {
     const installationId = this.installationId(target);
     const login = await this.loginFor(installationId, userId);
-    const invitations = await this.request<GitHubInvitation[]>(installationId, {
+    const membership = await this.request<TeamMembership | null>(installationId, {
+      allowNotFound: true,
       method: "GET",
-      path: `/orgs/${encodeURIComponent(target.organization)}/invitations?per_page=100`
+      path: `/orgs/${encodeURIComponent(target.organization)}/teams/${encodeURIComponent(target.teamSlug)}/memberships/${encodeURIComponent(login)}`
     });
-    return invitations.some((invitation) => invitation.invitee?.login === login);
+    return membership?.state === "pending";
   }
 
   public async getTeamMembership(target: TeamTarget, userId: bigint): Promise<boolean> {

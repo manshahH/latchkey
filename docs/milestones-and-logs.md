@@ -13,7 +13,7 @@
 | M0 Foundation | DONE | 2026-09-16 | 2026-09-16 | All scoped foundation tasks complete. D-023 defers three automated guards. |
 | M1 Domain core | DONE | 2026-09-16 | 2026-09-16 | Pure license fold, grant planner, reconciliation planner, errors, and property tests complete. |
 | M2 Events and jobs | DONE | 2026-09-16 | 2026-09-17 | Verified event ingestion, Graphile Worker tasks, reconciler fake, and acceptance matrix complete. |
-| M3 GitHub App | IN PROGRESS | 2026-09-17 | | Local implementation and pre-existing-member live proof pass. Waiting only for external invite acceptance. |
+| M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | NOT STARTED | | | Needs owner: sandbox accounts |
 | M5 Claim and buyer experience | NOT STARTED | | | |
 | M6 Seller dashboard | NOT STARTED | | | |
@@ -30,10 +30,10 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-17
 **Branch in progress:** `m3/github-app`.
-**What exists:** M0 through M2 are complete. M3 now has a real GitHub App client with short-lived installation token caching, numeric identity resolution, per-installation concurrency, safe typed rate-limit errors, signed GitHub webhook storage, installation pause state, invitation watchdog, rolling invite budget, and drift-only sweep behavior. The owner App is installed on the disposable free organization `latchkey-test-manshah` and team `latchkey-test`.
-**Next action:** Complete the M3 live invitation acceptance and explicit safe organization-revoke proof with a second existing GitHub account, then commit the verified milestone.
-**Open blockers:** M3 live invite acceptance needs a second existing GitHub account that is not a member of the disposable organization.
-**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), a second GitHub account for the final live invite acceptance test, provider sandbox accounts (blocks M4).
+**What exists:** M0 through M3 are complete. M3 provides the real GitHub App client, signed delivery storage, installation pause state, invitation watchdog, rolling invite budget, drift-only sweep, and live invite plus safe revoke proof. The owner App remains installed on the disposable free organization `latchkey-test-manshah` and team `latchkey-test`.
+**Next action:** Start M4 after the owner creates provider sandbox accounts and supplies captured sandbox webhooks.
+**Open blockers:** M4 needs owner-created provider sandbox accounts and captured signed webhook fixtures.
+**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), provider sandbox accounts and captured signed fixtures (block M4).
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
 
@@ -218,6 +218,14 @@ Format:
 
 ---
 
+### D-027: Use the owner GitHub view for staging cleanup proof
+- Date: 2026-09-17
+- Status: Accepted
+- Decided by: agent
+- Context: GitHub's least-privileged App token continued to report active organization membership immediately after a successful deletion, while the organization-owner endpoint returned 404.
+- Decision: manual M3 live scripts use the connected owner GitHub CLI only to prove pending, active, and removed membership state. Access mutations still use the GitHub App client.
+- Alternatives: trust the stale App readback (would make the live proof false); grant broader App permissions (unnecessary and requires reapproval).
+- Consequences: the documented live contract requires a logged-in organization-owner CLI, but production code keeps least privilege.
 ### D-026: Keep the M3 GitHub App Members-only
 - Date: 2026-09-17
 - Status: Accepted

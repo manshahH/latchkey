@@ -42,7 +42,8 @@ test("real client caches installation tokens, resolves numeric identities, and a
   });
 
   await client.inviteToTeam(target, 7n);
-  await client.getTeamMembership(target, 7n);
+  expect(await client.getPendingInvitation(target, 7n)).toBe(true);
+  expect(await client.getTeamMembership(target, 7n)).toBe(false);
 
   expect(calls.filter((call) => call.url.endsWith("/access_tokens"))).toHaveLength(1);
   expect(calls).toContainEqual(
