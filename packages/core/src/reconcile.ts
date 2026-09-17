@@ -11,7 +11,8 @@ export type ObservedGrantState =
   | "removing"
   | "removed"
   | "removed_externally"
-  | "error_retrying";
+  | "error_retrying"
+  | "queued";
 
 export interface ReconcileContext {
   hasOtherPresentGrants: boolean;
@@ -70,6 +71,8 @@ export const planReconcile = (
       case "removing":
       case "error_retrying":
         return [action("needs_attention")];
+      case "queued":
+        return [action(context.isOrgMember ? "add_team_only" : "invite")];
     }
   }
 
@@ -91,5 +94,7 @@ export const planReconcile = (
     case "removing":
     case "error_retrying":
       return [action("needs_attention")];
+    case "queued":
+      return [action("noop")];
   }
 };

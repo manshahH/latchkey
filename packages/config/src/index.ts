@@ -32,3 +32,40 @@ export const loadConfig = (environment: NodeJS.ProcessEnv): AppConfig => {
 
   throw new ConfigurationError(`Configuration error: ${message}`);
 };
+
+const githubEnvironmentSchema = z.object({
+  LATCHKEY_GITHUB_APP_ID: z.coerce.number().int().positive(),
+  LATCHKEY_GITHUB_PRIVATE_KEY_PATH: z.string().min(1),
+  LATCHKEY_GITHUB_WEBHOOK_SECRET: z.string().min(32)
+});
+
+export type GitHubAppConfig = Readonly<z.infer<typeof githubEnvironmentSchema>>;
+
+/** GitHub is loaded separately so provider-only local tools do not need App credentials. */
+export const loadGitHubConfig = (environment: NodeJS.ProcessEnv): GitHubAppConfig => {
+  const parsed = githubEnvironmentSchema.safeParse(environment);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const pathSegment = issue?.path[0];
+  const variableName = typeof pathSegment === "string" ? pathSegment : "environment";
+  const message =
+    issue?.code === "invalid_type" && issue.received === "undefined"
+      ? `${variableName} is required.`
+      : `${variableName} is invalid.`;
+  throw new ConfigurationError(`Configuration error: ${message}`);
+};
+const githubClientEnvironmentSchema = z.object({
+  LATCHKEY_GITHUB_APP_ID: z.coerce.number().int().positive(),
+  LATCHKEY_GITHUB_PRIVATE_KEY_PATH: z.string().min(1)
+});
+
+export type GitHubClientConfig = Readonly<z.infer<typeof githubClientEnvironmentSchema>>;
+
+export const loadGitHubClientConfig = (environment: NodeJS.ProcessEnv): GitHubClientConfig => {
+  const parsed = githubClientEnvironmentSchema.safeParse(environment);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const pathSegment = issue?.path[0];
+  const variableName = typeof pathSegment === "string" ? pathSegment : "environment";
+  throw new ConfigurationError(`Configuration error: ${variableName} is required.`);
+};

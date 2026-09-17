@@ -137,16 +137,18 @@ All seller-owned tables carry `seller_id`. IDs are UUIDv7. Timestamps are `times
 | `users` | People who log in (seller members and buyers share this) | `id`, `github_user_id` unique (bigint), `github_login` (cache only), `email` |
 | `seller_members` | Who can manage a seller | `seller_id`, `user_id`, `role` (owner, admin, viewer) |
 | `sessions` | Server-side sessions | `id` (hashed token), `user_id`, `expires_at` |
-| `github_installations` | GitHub App installed on an org | `installation_id` unique, `seller_id`, `account_login`, `account_type`, `suspended_at`, `uninstalled_at` |
+| `github_installations` | GitHub App installed on an org | `installation_id` unique, `seller_id`, numeric account id, account login and type, granted permissions, installed and updated timestamps, suspended and uninstalled timestamps |
 | `provider_connections` | A connected payment provider | `seller_id`, `provider`, `webhook_secret_enc`, `api_key_enc`, `key_version`, `status`, `mode` (test, live) |
 | `products` | What is sold | `seller_id`, `name`, `status` (draft, active, archived), `update_window_days` nullable, `revoke_policy` jsonb |
-| `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: `installation_id`, `team_id`, `team_slug`) |
+| `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: organization and team slug) |
 | `provider_products` | Maps provider product/price IDs to our product | `provider_connection_id`, `external_product_id`, `external_price_id`, `product_id`, `seats` default 1, unique on (connection, external ids) |
 | `licenses` | One purchase or subscription | `seller_id`, `product_id`, `status`, `kind` (one_time, subscription), `seats_total`, `purchased_at`, `updates_until` nullable, `purchase_email`, `manager_user_id` nullable, `status_reason` |
 | `license_external_refs` | Links a license to provider objects (many providers over time) | `license_id`, `provider`, `external_order_id`, `external_subscription_id`, `external_customer_id`, unique on (provider, external_order_id) |
 | `seats` | Person slots inside a license | `license_id`, `user_id` nullable, `assigned_at`, `released_at` |
 | `claims` | Claim links | `license_id`, `token_hash` unique, `expires_at`, `used_count`, `max_uses` |
 | `grants` | Desired access for one seat on one deliverable | `seat_id`, `deliverable_id`, `desired` (present, absent), `observed` (see 6.2), `provenance` (added_by_us, pre_existing), `last_reconciled_at`, `attempts`, `next_attempt_at`, `github_invitation_id` nullable, `invite_sent_at`, `invite_count` |
+| `github_webhook_deliveries` | Every verified GitHub delivery, stored once | delivery id unique, event, action, raw parsed payload, received and processed timestamps, process error |
+| `github_invite_attempts` | Rolling organization invite budget ledger | installation id, grant id, sent timestamp |
 | `external_events` | Every verified inbound event, stored once | `source` (provider name or github), `external_event_id`, `seller_id` nullable, `received_at`, `occurred_at`, `type`, `payload` jsonb, `processed_at`, `process_error`; unique on (source, external_event_id) |
 | `license_events` | Normalized events applied to a license (the fold input) | `license_id`, `external_event_id`, `type`, `occurred_at`, `data` jsonb |
 | `activity_log` | Human-readable history for sellers | `seller_id`, `subject_type`, `subject_id`, `action`, `reason`, `actor` (system, user id, provider), `created_at` |
@@ -346,15 +348,13 @@ Used for: installation on seller orgs, seller login, buyer login.
 | Permission | Level | Why |
 |---|---|---|
 | Members (organization) | Read and write | Team membership, org invitations, removing members we added |
-| Metadata (repository) | Read | Required baseline |
-| Contents (repository) | Read | Build registry artifacts from release tags (Next phase; request only when that phase ships) |
-| Administration (organization) | Read | Only if needed to read org plan and seat info; confirm during M2 whether this is required, prefer not requesting it |
+| Metadata (repository) | GitHub baseline | No repository selection is requested for M3 |
 
-**Webhook events subscribed:** `installation`, `installation_repositories`, `organization`, `membership`, `team`, `release` (Next phase).
+**Webhook events subscribed:** `installation` and `installation_repositories` arrive for every GitHub App. The deployed App also subscribes to `organization`, `membership`, and `team`. `release` remains next phase.
 
 **User authorization:** only for identity (numeric user id, login, verified primary email if granted). No repo scopes for users.
 
-Any permission change is a decision entry and requires owner approval, because it forces every seller to re-approve.
+M3 deliberately does not request Organization Administration or repository Contents. Plan and private-forking checks return unavailable until a later owner-approved permission change. Any permission change is a decision entry and requires owner approval, because it forces every seller to re-approve.
 
 ### 8.2 Endpoints we expect to use (verify before coding)
 
@@ -366,6 +366,7 @@ Any permission change is a decision entry and requires owner approval, because i
 - Pending and failed org invitations: `GET /orgs/{org}/invitations`, `GET /orgs/{org}/failed_invitations`, cancel `DELETE /orgs/{org}/invitations/{invitation_id}`
 - List team members: `GET /orgs/{org}/teams/{team_slug}/members`
 - Resolve login from id: `GET /user/{account_id}`
+- List a user's organization teams: `GET /orgs/{org}/memberships/{username}/teams`
 
 ### 8.3 FakeGitHub contract used in local tests
 

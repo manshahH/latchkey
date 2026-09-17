@@ -31,6 +31,13 @@ export class ConflictError extends LatchkeyError {
 export class ExternalTransientError extends LatchkeyError {
   readonly code = "external_transient";
   readonly statusCode = 503;
+
+  public constructor(
+    message: string,
+    public readonly retryAfterMs?: number
+  ) {
+    super(message);
+  }
 }
 
 export class ExternalPermanentError extends LatchkeyError {

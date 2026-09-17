@@ -8,6 +8,7 @@ import {
   type ObservedGrantState
 } from "@latchkey/core";
 import type { GitHubClient, TeamTarget } from "@latchkey/github";
+import { enqueueJob } from "./repositories.js";
 
 interface GrantRow {
   id: string;
@@ -17,14 +18,23 @@ interface GrantRow {
   provenance: "added_by_us" | "pre_existing" | null;
   github_user_id: string | bigint | null;
   remove_from_org_when_no_grants: boolean;
-  invite_sent_at: Date | null;
+  invite_sent_at: Date | string | null;
+  invite_count: number;
   config: unknown;
+  installation_id: string | bigint | null;
+  installation_suspended_at: Date | string | null;
+  installation_uninstalled_at: Date | string | null;
 }
 
 const TeamConfigSchema = z
   .object({ organization: z.string().min(1), teamSlug: z.string().min(1) })
   .strict();
 type Queryable = Sql | TransactionSql;
+const inviteBudget = 50;
+const maxReinvites = 3;
+const invitationWatchMs = 6 * 24 * 60 * 60 * 1_000;
+
+const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
 const recordAttention = async (
   sql: Queryable,
@@ -37,7 +47,33 @@ const recordAttention = async (
   await sql`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${grant.seller_id}::uuid, 'grant', ${grant.id}::uuid, 'needs_attention', ${reason}, 'system', ${now.toISOString()})`;
 };
 
-/** Reconciliation is idempotent: observe team and organization state, then apply only the smallest action. */
+const markQueued = async (sql: Queryable, grant: GrantRow, now: Date): Promise<void> => {
+  const nextAttempt = new Date(now.getTime() + 24 * 60 * 60 * 1_000);
+  await sql`UPDATE grants SET observed = 'queued', next_attempt_at = ${nextAttempt.toISOString()} WHERE id = ${grant.id}::uuid`;
+  await sql`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${grant.seller_id}::uuid, 'grant', ${grant.id}::uuid, 'queued', 'GitHub organization invitation budget is full', 'system', ${now.toISOString()})`;
+};
+
+const recordAttentionAndNotify = async (
+  sql: Queryable,
+  grant: GrantRow,
+  reason: string,
+  now: Date
+): Promise<void> => {
+  await recordAttention(sql, grant, reason, now);
+  await enqueueJob(sql, {
+    taskIdentifier: "notify_buyer",
+    payload: { grantId: grant.id, reason: "github_invite_expired" },
+    jobKey: `notify-buyer:github-invite:${grant.id}`,
+    runAt: now
+  });
+  await enqueueJob(sql, {
+    taskIdentifier: "notify_seller",
+    payload: { grantId: grant.id, reason: "github_invite_expired" },
+    jobKey: `notify-seller:github-invite:${grant.id}`,
+    runAt: now
+  });
+};
+/** Reconciliation is idempotent: observe state, then apply only the smallest safe GitHub action. */
 export const reconcileStoredGrant = async (
   sql: Sql,
   grantId: string,
@@ -51,13 +87,23 @@ export const reconcileStoredGrant = async (
       const rows = await transaction<GrantRow[]>`
         SELECT grants.id, licenses.seller_id, grants.desired, grants.observed, grants.provenance,
           users.github_user_id, COALESCE((products.revoke_policy->>'remove_from_org_when_no_grants')::boolean, true) AS remove_from_org_when_no_grants,
-          grants.invite_sent_at, deliverables.config
+          grants.invite_sent_at, grants.invite_count, deliverables.config, installation.installation_id,
+          installation.suspended_at AS installation_suspended_at,
+          installation.uninstalled_at AS installation_uninstalled_at
         FROM grants
         JOIN seats ON seats.id = grants.seat_id
         JOIN licenses ON licenses.id = seats.license_id
         JOIN products ON products.id = licenses.product_id
         JOIN deliverables ON deliverables.id = grants.deliverable_id
         LEFT JOIN users ON users.id = seats.user_id
+        LEFT JOIN LATERAL (
+          SELECT installation_id, suspended_at, uninstalled_at
+          FROM github_installations
+          WHERE seller_id = licenses.seller_id
+            AND account_login = deliverables.config->>'organization'
+          ORDER BY installed_at DESC
+          LIMIT 1
+        ) AS installation ON TRUE
         WHERE grants.id = ${grantId}::uuid FOR UPDATE OF grants
       `;
       const grant = rows[0];
@@ -65,11 +111,24 @@ export const reconcileStoredGrant = async (
       if (grant === undefined) return;
       if (grant.github_user_id === null)
         return recordAttention(transaction, grant, "Buyer has no GitHub identity.", now);
+      if (
+        grant.installation_id !== null &&
+        (grant.installation_suspended_at !== null || grant.installation_uninstalled_at !== null)
+      )
+        return recordAttention(transaction, grant, "GitHub App installation is paused.", now);
       const githubUserId = BigInt(grant.github_user_id);
-      const target: TeamTarget = TeamConfigSchema.parse(grant.config);
-      const isTeamMember = github.getTeamMembership(target, githubUserId);
-      const hasPendingInvitation = github.getPendingInvitation(target, githubUserId);
-      const isOrgMember = github.getOrganizationMembership(target.organization, githubUserId);
+      const config = TeamConfigSchema.parse(grant.config);
+      const target: TeamTarget = {
+        ...config,
+        ...(grant.installation_id === null ? {} : { installationId: BigInt(grant.installation_id) })
+      };
+      const isTeamMember = await github.getTeamMembership(target, githubUserId);
+      const hasPendingInvitation = await github.getPendingInvitation(target, githubUserId);
+      const isOrgMember = await github.getOrganizationMembership(
+        target.organization,
+        githubUserId,
+        target.installationId
+      );
       const observed: ObservedGrantState = isTeamMember
         ? "active"
         : hasPendingInvitation
@@ -93,36 +152,65 @@ export const reconcileStoredGrant = async (
           AND deliverables.config->>'organization' = ${target.organization}
       `;
       const managedTeams = new Set(managedRows.map((row) => row.team_slug));
-      const hasUnmanagedTeams = github
-        .listUserTeams(target.organization, githubUserId)
-        .some((team) => !managedTeams.has(team));
+      const hasUnmanagedTeams = (
+        await github.listUserTeams(target.organization, githubUserId, target.installationId)
+      ).some((team) => !managedTeams.has(team));
+      const inviteSentAt = grant.invite_sent_at === null ? null : toDate(grant.invite_sent_at);
+      if (!isTeamMember && grant.invite_count >= maxReinvites + 1)
+        return recordAttentionAndNotify(
+          transaction,
+          grant,
+          "GitHub invitation expired too many times.",
+          now
+        );
       const actions = planReconcile({ desired: grant.desired }, observed, {
         hasOtherPresentGrants: otherGrants[0]?.exists ?? false,
         hasUnmanagedTeams,
         invitationCreatedByUs: grant.provenance === "added_by_us",
         inviteNearExpiry:
-          grant.invite_sent_at !== null &&
-          now.getTime() - grant.invite_sent_at.getTime() >= 6 * 24 * 60 * 60 * 1_000,
+          inviteSentAt !== null && now.getTime() - inviteSentAt.getTime() >= invitationWatchMs,
         isOrgMember,
         provenance: grant.provenance ?? "pre_existing",
         removeFromOrgWhenNoGrants: grant.remove_from_org_when_no_grants
       });
+      let sentInvitation = false;
       for (const action of actions) {
-        if (action.type === "cancel_invite") github.cancelInvitation(target, githubUserId);
+        if (action.type === "cancel_invite") await github.cancelInvitation(target, githubUserId);
         if (action.type === "invite" || action.type === "reinvite") {
-          github.inviteToTeam(target, githubUserId);
+          if (action.type === "reinvite" && grant.invite_count >= maxReinvites + 1)
+            return recordAttentionAndNotify(
+              transaction,
+              grant,
+              "GitHub invitation expired too many times.",
+              now
+            );
+          if (target.installationId !== undefined) {
+            const sent = await transaction<{ count: string }[]>`
+              SELECT COUNT(*)::text AS count FROM github_invite_attempts
+              WHERE installation_id = ${String(target.installationId)}::bigint
+                AND sent_at > ${new Date(now.getTime() - 24 * 60 * 60 * 1_000).toISOString()}
+            `;
+            if (Number(sent[0]?.count ?? "0") >= inviteBudget)
+              return markQueued(transaction, grant, now);
+          }
+          await github.inviteToTeam(target, githubUserId);
+          sentInvitation = true;
           afterGitHubCall?.();
         }
         if (action.type === "add_team_only") {
-          github.addTeamMember(target, githubUserId);
+          await github.addTeamMember(target, githubUserId);
           afterGitHubCall?.();
         }
         if (action.type === "remove_team") {
-          github.removeTeamMember(target, githubUserId);
+          await github.removeTeamMember(target, githubUserId);
           afterGitHubCall?.();
         }
         if (action.type === "remove_org") {
-          github.removeOrganizationMember(target.organization, githubUserId);
+          await github.removeOrganizationMember(
+            target.organization,
+            githubUserId,
+            target.installationId
+          );
           afterGitHubCall?.();
         }
         if (action.type === "needs_attention") {
@@ -130,14 +218,16 @@ export const reconcileStoredGrant = async (
           return;
         }
       }
-      const finalState = github.getTeamMembership(target, githubUserId)
+      if (sentInvitation && target.installationId !== undefined)
+        await transaction`INSERT INTO github_invite_attempts (id, installation_id, grant_id, sent_at) VALUES (${randomUUID()}::uuid, ${String(target.installationId)}::bigint, ${grant.id}::uuid, ${now.toISOString()})`;
+      const finalState = (await github.getTeamMembership(target, githubUserId))
         ? "active"
-        : github.getPendingInvitation(target, githubUserId)
+        : (await github.getPendingInvitation(target, githubUserId))
           ? "invited"
           : grant.desired === "absent"
             ? "removed"
             : "none";
-      await transaction`UPDATE grants SET observed = ${finalState}, last_reconciled_at = ${now.toISOString()}, attempts = 0, invite_sent_at = CASE WHEN ${finalState} = 'invited' THEN COALESCE(invite_sent_at, ${now.toISOString()}) ELSE invite_sent_at END WHERE id = ${grant.id}::uuid`;
+      await transaction`UPDATE grants SET observed = ${finalState}, last_reconciled_at = ${now.toISOString()}, attempts = 0, invite_sent_at = CASE WHEN ${sentInvitation} THEN ${now.toISOString()} ELSE invite_sent_at END, invite_count = invite_count + ${sentInvitation ? 1 : 0} WHERE id = ${grant.id}::uuid`;
       await transaction`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${grant.seller_id}::uuid, 'grant', ${grant.id}::uuid, ${finalState}, 'reconciled desired state', 'system', ${now.toISOString()})`;
     });
   } catch (error) {
@@ -145,7 +235,8 @@ export const reconcileStoredGrant = async (
     if (error instanceof ExternalPermanentError)
       return recordAttention(sql, grantForFailure, error.message, now);
     if (error instanceof ExternalTransientError) {
-      await sql`UPDATE grants SET observed = 'error_retrying', attempts = attempts + 1, next_attempt_at = ${now.toISOString()} WHERE id = ${grantForFailure.id}::uuid`;
+      const nextAttempt = new Date(now.getTime() + (error.retryAfterMs ?? 1_000));
+      await sql`UPDATE grants SET observed = 'error_retrying', attempts = attempts + 1, next_attempt_at = ${nextAttempt.toISOString()} WHERE id = ${grantForFailure.id}::uuid`;
       throw error;
     }
     throw error;

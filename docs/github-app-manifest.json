@@ -1,0 +1,14 @@
+{
+  "name": "Latchkey staging template",
+  "url": "https://staging.example.com",
+  "hook_attributes": {
+    "active": true,
+    "url": "https://staging.example.com/webhooks/github"
+  },
+  "public": false,
+  "redirect_url": "https://staging.example.com/github/install/callback",
+  "default_permissions": {
+    "members": "write"
+  },
+  "default_events": ["membership", "organization", "team"]
+}

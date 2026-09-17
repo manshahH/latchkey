@@ -1,6 +1,12 @@
 import { Hono } from "hono";
-import { createProductionWebhookStore, type SecretDecryptor } from "@latchkey/db";
+import {
+  createProductionWebhookStore,
+  storeVerifiedGitHubWebhook,
+  type GitHubWebhookInput,
+  type SecretDecryptor
+} from "@latchkey/db";
 import type { Sql } from "postgres";
+import { verifyGitHubWebhookSignature } from "@latchkey/github";
 import { TestProvider } from "@latchkey/providers";
 
 export interface WebhookStore {
@@ -19,7 +25,7 @@ export interface WebhookStore {
 }
 
 export interface WebhookMetric {
-  increment(name: "webhook_signature_invalid", labels: { provider: string }): void;
+  increment(name: string, labels: { provider: string }): void;
 }
 
 /** Verification precedes persistence, and persistence plus enqueue is delegated to one database transaction. */
@@ -64,3 +70,66 @@ export const createProductionApi = (
   now: () => Date,
   metrics?: WebhookMetric
 ) => createApi(createProductionWebhookStore(sql, decryptor), now, metrics);
+
+export interface GitHubWebhookStore {
+  storeVerifiedGitHubWebhook(input: GitHubWebhookInput): Promise<boolean>;
+}
+
+/** GitHub webhook input is authenticated before it reaches JSON parsing or persistence. */
+export const createGitHubWebhookApi = (
+  store: GitHubWebhookStore,
+  webhookSecret: string,
+  now: () => Date,
+  metrics?: WebhookMetric
+) => {
+  const app = new Hono();
+  app.post("/webhooks/github", async (context) => {
+    const body = await context.req.text();
+    const signature = context.req.header("x-hub-signature-256") ?? "";
+    if (!verifyGitHubWebhookSignature(body, signature, webhookSecret)) {
+      metrics?.increment("github_webhook_signature_invalid", { provider: "github" });
+      return context.json(
+        { error: { code: "auth_error", message: "Webhook could not be verified." } },
+        401
+      );
+    }
+    const deliveryId = context.req.header("x-github-delivery");
+    const event = context.req.header("x-github-event");
+    if (deliveryId === undefined || event === undefined)
+      return context.json(
+        { error: { code: "validation_error", message: "Webhook delivery headers are missing." } },
+        422
+      );
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(body) as Record<string, unknown>;
+    } catch {
+      return context.json(
+        { error: { code: "validation_error", message: "Webhook body is invalid." } },
+        422
+      );
+    }
+    await store.storeVerifiedGitHubWebhook({
+      action: typeof payload.action === "string" ? payload.action : null,
+      deliveryId,
+      event,
+      now: now(),
+      payload
+    });
+    return context.json({ received: true });
+  });
+  return app;
+};
+
+export const createProductionGitHubWebhookApi = (
+  sql: Sql,
+  webhookSecret: string,
+  now: () => Date,
+  metrics?: WebhookMetric
+) =>
+  createGitHubWebhookApi(
+    { storeVerifiedGitHubWebhook: (input) => storeVerifiedGitHubWebhook(sql, input) },
+    webhookSecret,
+    now,
+    metrics
+  );

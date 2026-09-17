@@ -13,7 +13,7 @@
 | M0 Foundation | DONE | 2026-09-16 | 2026-09-16 | All scoped foundation tasks complete. D-023 defers three automated guards. |
 | M1 Domain core | DONE | 2026-09-16 | 2026-09-16 | Pure license fold, grant planner, reconciliation planner, errors, and property tests complete. |
 | M2 Events and jobs | DONE | 2026-09-16 | 2026-09-17 | Verified event ingestion, Graphile Worker tasks, reconciler fake, and acceptance matrix complete. |
-| M3 GitHub App | NOT STARTED | | | Needs owner: create GitHub Apps, approve permissions |
+| M3 GitHub App | IN PROGRESS | 2026-09-17 | | Local implementation and pre-existing-member live proof pass. Waiting only for external invite acceptance. |
 | M4 Payment adapters | NOT STARTED | | | Needs owner: sandbox accounts |
 | M5 Claim and buyer experience | NOT STARTED | | | |
 | M6 Seller dashboard | NOT STARTED | | | |
@@ -29,11 +29,11 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 ## 2. Current state (update at the end of every session)
 
 **Last updated:** 2026-09-17
-**Branch in progress:** `main` (owner requested direct commits).
-**What exists:** M0 and M1 are complete. M2 now has a real Postgres event pipeline: verified test-provider webhooks decrypt their connection secret in `packages/db`, transactionally persist one event, and enqueue Graphile Worker tasks. Worker tasks normalize and refold licenses, derive grants, reconcile against a stateful organization and team FakeGitHub, retry typed transient failures, and create visible drift for permanent failures.
-**Next action:** Begin M3 only after the owner creates the GitHub App and approves its permissions.
-**Open blockers:** none for M2.
-**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), GitHub App creation and permission approval (blocks M3), provider sandbox accounts (blocks M4).
+**Branch in progress:** `m3/github-app`.
+**What exists:** M0 through M2 are complete. M3 now has a real GitHub App client with short-lived installation token caching, numeric identity resolution, per-installation concurrency, safe typed rate-limit errors, signed GitHub webhook storage, installation pause state, invitation watchdog, rolling invite budget, and drift-only sweep behavior. The owner App is installed on the disposable free organization `latchkey-test-manshah` and team `latchkey-test`.
+**Next action:** Complete the M3 live invitation acceptance and explicit safe organization-revoke proof with a second existing GitHub account, then commit the verified milestone.
+**Open blockers:** M3 live invite acceptance needs a second existing GitHub account that is not a member of the disposable organization.
+**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), a second GitHub account for the final live invite acceptance test, provider sandbox accounts (blocks M4).
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
 
@@ -218,6 +218,14 @@ Format:
 
 ---
 
+### D-026: Keep the M3 GitHub App Members-only
+- Date: 2026-09-17
+- Status: Accepted
+- Decided by: owner and agent
+- Context: the owner approved Organization Members read and write for the local App. Organization Administration would expose extra organization settings and requires reinstall approval.
+- Decision: M3 requests only Members read and write. Organization plan and private repository forking checks report unavailable when GitHub does not expose them with that permission.
+- Alternatives: add Administration read now (more onboarding detail, but a broader permission and reinstall friction); infer plan details (unreliable).
+- Consequences: use a dedicated free organization for testing and keep plan warnings conditional until a later approved App permission change.
 ### D-025: Graphile Worker is the sole M2 job executor
 - Date: 2026-09-17
 - Status: Accepted
@@ -244,6 +252,20 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-17: M3 GitHub App implementation and local acceptance complete
+- Branch: `m3/github-app`.
+- Goal: deliver real GitHub App access control, verified GitHub webhooks, installation lifecycle, watchdog, and sweep behavior.
+- Done: added a JWT-authenticated GitHub App client with token caching, numeric id to current-login resolution, a two-call per-installation limit, and safe 429, reset-header, 5xx, 404, and 422 classification. Added a reversible migration for App installation metadata, verified delivery deduplication, and rolling invite records. Graphile schedules the hourly invite watchdog and daily sweep. M3 handles signed installation, organization, membership, and team deliveries without direct GitHub calls in the webhook path. The local suite proves three day-six re-invites, attention and notification jobs after expiry, a 50-per-day budget with 10 queued then resumed, manual-removal drift with no re-add, uninstalled pause with zero GitHub calls, renamed numeric identities, a real-shaped organization removal payload, and bad-signature zero rows.
+- Local proof: the clean `pnpm check` passed: 19 unit files and 53 tests, 5 core coverage files and 32 tests at 96.71% lines, 5 real-Postgres integration files and 15 tests, 1 browser test, TypeScript build, and Prettier. The GitHub signature mutation proof changed the bad-signature result from 401 to 200 and failed its test. The source was restored and the test passed.
+- Live proof: `pnpm test:github-live` passed against `latchkey-test-manshah/latchkey-test`. It removed the owner from the disposable test team, verified organization membership remained, and restored the team membership through the real GitHub App API. The separate live invitation script now explicitly removes only its disposable, test-created organization member after checking team removal.
+- Remaining blocker: GitHub cannot invite the organization owner as an external buyer. The full live invite, acceptance, and added-by-us org revoke proof needs one second existing GitHub account. Reproducible commands and steps are in `docs/runbooks/github-app-setup.md`.
+- Decisions made: D-026.
+### 2026-09-17: M3 GitHub App started
+- Branch: `m3/github-app`.
+- Goal: complete the real GitHub App integration using the owner's installed free test organization and team.
+- Plan: add the authenticated installation client and typed error mapping, persist installation lifecycle and signed GitHub webhook deliveries, add watchdog and sweep Graphile tasks with invite budgets, create FakeGitHub and real-client contract tests, then run the live staging script against `latchkey-test-manshah`.
+- Edge cases to handle: missing or bad webhook signature, uninstalled or suspended installation, invitation expiry and re-invites, 24-hour invite caps, manual member removal, renamed users, permanent and transient GitHub failures, and no organization removal for pre-existing members.
+- Uncertainty: the final live invite acceptance test needs a second existing GitHub account. All local and non-destructive live checks can proceed now.
 ### 2026-09-17: M2 events and jobs complete
 - Branch / commits: `main`; final local commits follow this completed verification.
 - Goal: finish the durable webhook, Graphile Worker, processor, reconciler, FakeGitHub, production store, and acceptance coverage required for M2.

@@ -15,6 +15,9 @@
     "test:core:coverage": "vitest run packages/core/src --coverage.enabled --coverage.provider=v8 --coverage.include=packages/core/src/**/*.ts --coverage.exclude=packages/core/src/**/*.test.ts --coverage.thresholds.lines=95",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "test:github-live": "tsx scripts/github-live.ts",
+    "test:github-live:invite": "tsx scripts/github-live-invite.ts",
+    "test:github-live:verify": "tsx scripts/github-live-verify.ts",
     "build": "tsc --project tsconfig.build.json",
     "db:migrate": "tsx packages/db/src/cli.ts migrate",
     "db:rollback": "tsx packages/db/src/cli.ts rollback",
@@ -27,6 +30,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@latchkey/config": "workspace:*",
+    "@latchkey/github": "workspace:*",
     "@latchkey/testing": "workspace:*",
     "@playwright/test": "^1.57.0",
     "@vitest/coverage-v8": "^3.2.4",

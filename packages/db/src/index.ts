@@ -18,3 +18,12 @@ export type {
   WebhookConnection
 } from "./repositories.js";
 export { applyMigrations, migrationIds, resetMigrations, rollbackMigration } from "./migrator.js";
+export {
+  linkGitHubInstallation,
+  processStoredGitHubWebhook,
+  runAllReconcileSweeps,
+  runInviteWatchdog,
+  runReconcileSweep,
+  storeVerifiedGitHubWebhook
+} from "./github.js";
+export type { GitHubInstallationLink, GitHubWebhookInput } from "./github.js";

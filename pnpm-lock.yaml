@@ -15,6 +15,12 @@ importers:
       '@eslint/js':
         specifier: ^9.36.0
         version: 9.39.5
+      '@latchkey/config':
+        specifier: workspace:*
+        version: link:packages/config
+      '@latchkey/github':
+        specifier: workspace:*
+        version: link:packages/github
       '@latchkey/testing':
         specifier: workspace:*
         version: link:packages/testing
@@ -78,6 +84,9 @@ importers:
       '@latchkey/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@latchkey/github':
+        specifier: workspace:*
+        version: link:../../packages/github
       '@latchkey/providers':
         specifier: workspace:*
         version: link:../../packages/providers

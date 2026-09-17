@@ -30,6 +30,15 @@ const sellersTableExists = async (): Promise<boolean> => {
   return rows[0]?.exists ?? false;
 };
 
+const githubWebhookDeliveriesTableExists = async (): Promise<boolean> => {
+  const rows = await database.sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'github_webhook_deliveries'
+    ) AS exists
+  `;
+  return rows[0]?.exists ?? false;
+};
 beforeAll(async () => {
   postgres = await startPostgres();
   database = createDatabase(postgres.databaseUrl);
@@ -41,17 +50,21 @@ afterAll(async () => {
 });
 
 test("migrations run up, down, then up on a clean Postgres database", async () => {
-  expect(await applyMigrations(database.sql)).toBe(2);
+  expect(await applyMigrations(database.sql)).toBe(3);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
+  expect(await githubWebhookDeliveriesTableExists()).toBe(true);
 
   expect(await rollbackMigration(database.sql)).toBe(true);
-
+  expect(await githubWebhookDeliveriesTableExists()).toBe(false);
+  expect(await sellersTableExists()).toBe(true);
+  expect(await rollbackMigration(database.sql)).toBe(true);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(false);
 
-  expect(await applyMigrations(database.sql)).toBe(1);
+  expect(await applyMigrations(database.sql)).toBe(2);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
+  expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await applyMigrations(database.sql)).toBe(0);
 }, 120_000);

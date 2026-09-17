@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { createLocalKms } from "@latchkey/crypto";
 import { applyMigrations, createDatabase } from "@latchkey/db";
 import { startPostgres, type TestPostgres } from "@latchkey/testing";
-import { createProductionApi } from "./index.js";
+import { createProductionApi, createProductionGitHubWebhookApi } from "./index.js";
 
 let postgres: TestPostgres;
 let database: ReturnType<typeof createDatabase>;
@@ -40,4 +40,26 @@ test("invalid signature returns 401, stores zero rows, and increments the provid
   expect(response.status).toBe(401);
   expect(await database.sql`SELECT * FROM external_events`).toHaveLength(0);
   expect(metrics).toEqual([{ name: "webhook_signature_invalid", provider: "test" }]);
+}, 120_000);
+
+test("invalid GitHub signature returns 401, stores no delivery, and increments the GitHub metric", async () => {
+  const metrics: Array<{ name: string; provider: string }> = [];
+  const api = createProductionGitHubWebhookApi(
+    database.sql,
+    "github-webhook-secret-that-is-long-enough",
+    () => new Date("2026-01-01T00:00:00Z"),
+    { increment: (name, labels) => metrics.push({ name, provider: labels.provider }) }
+  );
+  const response = await api.request("/webhooks/github", {
+    method: "POST",
+    body: "{}",
+    headers: {
+      "x-github-delivery": "delivery-1",
+      "x-github-event": "installation",
+      "x-hub-signature-256": "sha256=wrong"
+    }
+  });
+  expect(response.status).toBe(401);
+  expect(await database.sql`SELECT * FROM github_webhook_deliveries`).toHaveLength(0);
+  expect(metrics).toEqual([{ name: "github_webhook_signature_invalid", provider: "github" }]);
 }, 120_000);
