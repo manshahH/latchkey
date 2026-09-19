@@ -1,8 +1,11 @@
+import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { runMigrations, runOnce } from "graphile-worker";
+import { randomUUID } from "node:crypto";
 import { ExternalTransientError } from "@latchkey/core";
-import { enqueueWebhookEvent, applyMigrations, createDatabase } from "@latchkey/db";
+import { enqueueJob, enqueueWebhookEvent, applyMigrations, createDatabase } from "@latchkey/db";
 import { FakeGitHub } from "@latchkey/github";
+import { normalizePaddleWebhook } from "@latchkey/providers";
 import { startPostgres, type TestPostgres } from "@latchkey/testing";
 import { createTaskList } from "./index.js";
 
@@ -12,6 +15,7 @@ const seller = "00000000-0000-0000-0000-000000000001";
 const product = "00000000-0000-0000-0000-000000000011";
 const deliverable = "00000000-0000-0000-0000-000000000021";
 const now = new Date("2026-01-01T00:00:00Z");
+const paddleConnection = "00000000-0000-0000-0000-000000000041";
 const target = { organization: "seller-org", teamSlug: "buyers" };
 
 const payload = (
@@ -191,3 +195,125 @@ test("an injected 404 marks the grant needs_attention and creates a drift item",
     { kind: "github_permanent_failure" }
   ]);
 }, 120_000);
+
+test("captured Paddle purchase maps to a license and refund removes the FakeGitHub grant", async () => {
+  const captured = JSON.parse(
+    await readFile("fixtures/webhooks/paddle/transaction.completed.json", "utf8")
+  ) as { body: string };
+  const purchase = normalizePaddleWebhook(
+    JSON.parse(captured.body) as Record<string, unknown>,
+    now
+  )[0];
+  if (purchase === undefined) throw new Error("Captured Paddle purchase did not normalize.");
+  await database.sql`INSERT INTO provider_connections (id, seller_id, provider, webhook_secret_enc, mode) VALUES (${paddleConnection}::uuid, ${seller}::uuid, 'paddle', 'encrypted-test-secret', 'test')`;
+  await database.sql`INSERT INTO provider_products (id, provider_connection_id, external_product_id, external_price_id, product_id) VALUES (${randomUUID()}::uuid, ${paddleConnection}::uuid, ${purchase.externalProductId ?? ""}, ${purchase.externalPriceId ?? ""}, ${product}::uuid)`;
+  await enqueueWebhookEvent(database.sql, {
+    sellerId: seller,
+    source: "paddle",
+    externalEventId: purchase.event.id,
+    type: purchase.event.type,
+    payload: {
+      provider: "paddle",
+      event: purchase.event,
+      externalOrderId: purchase.externalOrderId,
+      externalProductId: purchase.externalProductId,
+      externalPriceId: purchase.externalPriceId,
+      providerConnectionId: paddleConnection,
+      githubUserId: "7",
+      purchaseEmail: "buyer@example.com",
+      seats: purchase.seats
+    },
+    now
+  });
+  const github = new FakeGitHub();
+  await runAvailableJobs(github);
+  expect(await database.sql<{ status: string }[]>`SELECT status FROM licenses`).toEqual([
+    { status: "active" }
+  ]);
+  expect(github.calls.filter((call) => call.action === "invite_to_team")).toHaveLength(1);
+
+  const refundCaptured = JSON.parse(
+    await readFile("fixtures/webhooks/paddle/adjustment.updated.json", "utf8")
+  ) as { body: string };
+  const refund = normalizePaddleWebhook(
+    JSON.parse(refundCaptured.body) as Record<string, unknown>,
+    now
+  )[0];
+  if (refund === undefined) throw new Error("Captured Paddle refund did not normalize.");
+  await enqueueWebhookEvent(database.sql, {
+    sellerId: seller,
+    source: "paddle",
+    externalEventId: refund.event.id,
+    type: refund.event.type,
+    payload: {
+      provider: "paddle",
+      event: refund.event,
+      externalOrderId: refund.externalOrderId,
+      externalProductId: refund.externalProductId,
+      externalPriceId: refund.externalPriceId,
+      providerConnectionId: paddleConnection,
+      seats: refund.seats
+    },
+    now: refund.event.receivedAt
+  });
+  await runAvailableJobs(github);
+  expect(await database.sql<{ status: string }[]>`SELECT status FROM licenses`).toEqual([
+    { status: "refunded" }
+  ]);
+  expect(await database.sql<{ desired: string }[]>`SELECT desired FROM grants`).toEqual([
+    { desired: "absent" }
+  ]);
+});
+
+test("an unmapped Paddle product creates drift and succeeds after mapping then reprocessing", async () => {
+  await database.sql`INSERT INTO provider_connections (id, seller_id, provider, webhook_secret_enc, mode) VALUES (${paddleConnection}::uuid, ${seller}::uuid, 'paddle', 'encrypted-test-secret', 'test')`;
+  const eventId = "paddle-unmapped-event";
+  await enqueueWebhookEvent(database.sql, {
+    sellerId: seller,
+    source: "paddle",
+    externalEventId: eventId,
+    type: "PaymentSucceeded",
+    payload: {
+      provider: "paddle",
+      event: {
+        id: eventId,
+        occurredAt: now,
+        receivedAt: now,
+        type: "PaymentSucceeded",
+        data: { kind: "one_time", updatesUntil: null }
+      },
+      externalOrderId: "paddle-unmapped-order",
+      externalProductId: "pro_unmapped",
+      externalPriceId: "pri_unmapped",
+      providerConnectionId: paddleConnection,
+      purchaseEmail: "buyer@example.com",
+      seats: 1
+    },
+    now
+  });
+  const github = new FakeGitHub();
+  await runAvailableJobs(github);
+  expect(
+    await database.sql<{ process_error: string }[]>`SELECT process_error FROM external_events`
+  ).toEqual([{ process_error: "unmapped_product" }]);
+  expect(await database.sql<{ kind: string }[]>`SELECT kind FROM drift_items`).toEqual([
+    { kind: "unmapped_product" }
+  ]);
+
+  await database.sql`INSERT INTO provider_products (id, provider_connection_id, external_product_id, external_price_id, product_id) VALUES (${randomUUID()}::uuid, ${paddleConnection}::uuid, 'pro_unmapped', 'pri_unmapped', ${product}::uuid)`;
+  const external = await database.sql<
+    { id: string }[]
+  >`SELECT id FROM external_events WHERE external_event_id = ${eventId}`;
+  const storedEventId = external[0]?.id;
+  if (storedEventId === undefined) throw new Error("Unmapped event was not stored.");
+  await enqueueJob(database.sql, {
+    taskIdentifier: "process_event",
+    payload: { externalEventId: storedEventId },
+    jobKey: `reprocess:${storedEventId}`,
+    runAt: now
+  });
+  await runAvailableJobs(github);
+  expect(await database.sql<{ status: string }[]>`SELECT status FROM licenses`).toEqual([
+    { status: "active" }
+  ]);
+});

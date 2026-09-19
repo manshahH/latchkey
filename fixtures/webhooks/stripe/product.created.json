@@ -1,0 +1,13 @@
+{
+  "body": "{\n  \"id\": \"evt_1UHRBQ7di7EQJawm7CrBgd4u\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-08-26.dahlia\",\n  \"created\": 1789835532,\n  \"data\": {\n    \"object\": {\n      \"id\": \"prod_VI1DGnZXe71fNZ\",\n      \"object\": \"product\",\n      \"active\": true,\n      \"attributes\": [],\n      \"created\": 1789835532,\n      \"default_price\": null,\n      \"description\": \"(created by Stripe CLI)\",\n      \"images\": [],\n      \"livemode\": false,\n      \"marketing_features\": [],\n      \"metadata\": {},\n      \"name\": \"myproduct\",\n      \"package_dimensions\": null,\n      \"shippable\": null,\n      \"statement_descriptor\": null,\n      \"tax_code\": null,\n      \"tax_details\": null,\n      \"type\": \"service\",\n      \"unit_label\": null,\n      \"updated\": 1789835532,\n      \"url\": null\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 2,\n  \"request\": {\n    \"id\": \"req_w0ssIrtxOBO7Pv\",\n    \"idempotency_key\": \"5eeadea7-1113-4b91-9d8f-f13f45e583b1\"\n  },\n  \"type\": \"product.created\"\n}",
+  "headers": {
+    "host": "127.0.0.1:4318",
+    "user-agent": "Stripe/1.0 (+https://stripe.com/docs/webhooks)",
+    "content-length": "938",
+    "accept": "*/*; q=0.5, application/xml",
+    "cache-control": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "stripe-signature": "t=1789835533,v1=070f88feb8dcc566d557f9bbe3af24fd976d57796515c803ee416680e05638ef,v0=087d5ec4eda818a0cc8c919a127f69edd1129588b0ca9e21c69bda02233cd702",
+    "accept-encoding": "gzip"
+  }
+}

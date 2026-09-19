@@ -1,0 +1,13 @@
+{
+  "body": "{\n  \"id\": \"evt_1UHRBQ7di7EQJawmzBpdepve\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-08-26.dahlia\",\n  \"created\": 1789835532,\n  \"data\": {\n    \"object\": {\n      \"id\": \"cus_VI1DPurpcHB1KL\",\n      \"object\": \"customer\",\n      \"address\": null,\n      \"balance\": 0,\n      \"created\": 1789835531,\n      \"currency\": null,\n      \"customer_account\": null,\n      \"default_source\": null,\n      \"delinquent\": false,\n      \"description\": \"(created by Stripe CLI)\",\n      \"discount\": null,\n      \"email\": null,\n      \"invoice_prefix\": \"0ZSA87GC\",\n      \"invoice_settings\": {\n        \"custom_fields\": null,\n        \"default_payment_method\": \"pm_1UHRBP7di7EQJawm4906UxRF\",\n        \"footer\": null,\n        \"rendering_options\": null\n      },\n      \"livemode\": false,\n      \"metadata\": {},\n      \"name\": null,\n      \"next_invoice_sequence\": 1,\n      \"phone\": null,\n      \"preferred_locales\": [],\n      \"shipping\": null,\n      \"tax_exempt\": \"none\",\n      \"test_clock\": null\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 2,\n  \"request\": {\n    \"id\": \"req_eQZGTn35IzeGzR\",\n    \"idempotency_key\": \"484a3e39-f68a-45f4-926d-d16b6b953bfb\"\n  },\n  \"type\": \"customer.created\"\n}",
+  "headers": {
+    "host": "127.0.0.1:4318",
+    "user-agent": "Stripe/1.0 (+https://stripe.com/docs/webhooks)",
+    "content-length": "1152",
+    "accept": "*/*; q=0.5, application/xml",
+    "cache-control": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "stripe-signature": "t=1789835532,v1=d03580dc3fac51c978c6bda8c97999b5d1ae791211a1b128f57dc1865390bd6e,v0=4a1b0dc92db466e2755ffc1beed996bd84eaeba0883498389515bcb7d3b6c86f",
+    "accept-encoding": "gzip"
+  }
+}

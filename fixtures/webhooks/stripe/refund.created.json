@@ -1,0 +1,13 @@
+{
+  "body": "{\n  \"id\": \"evt_3UHRB77di7EQJawm0s8Wp7ZF\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-08-26.dahlia\",\n  \"created\": 1789835515,\n  \"data\": {\n    \"object\": {\n      \"id\": \"re_3UHRB77di7EQJawm0xdGoouP\",\n      \"object\": \"refund\",\n      \"amount\": 100,\n      \"balance_transaction\": \"txn_3UHRB77di7EQJawm0CR0vHzG\",\n      \"charge\": \"ch_3UHRB77di7EQJawm0fYbFH4V\",\n      \"created\": 1789835515,\n      \"currency\": \"usd\",\n      \"customer\": null,\n      \"customer_account\": null,\n      \"destination_details\": {\n        \"card\": {\n          \"reference_status\": \"pending\",\n          \"reference_type\": \"acquirer_reference_number\",\n          \"type\": \"refund\"\n        },\n        \"type\": \"card\"\n      },\n      \"metadata\": {},\n      \"payment_intent\": \"pi_3UHRB77di7EQJawm0cBJmW2w\",\n      \"payment_method\": \"pm_1UHRB77di7EQJawmSdmJxnZg\",\n      \"reason\": null,\n      \"receipt_number\": null,\n      \"source_transfer_reversal\": null,\n      \"status\": \"succeeded\",\n      \"transfer_reversal\": null\n    },\n    \"previous_attributes\": {}\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 2,\n  \"request\": {\n    \"id\": \"req_yNRdpEKgfb3U99\",\n    \"idempotency_key\": \"6b6bf2f9-a69b-48f0-ab0e-472c90c729cf\"\n  },\n  \"type\": \"refund.created\"\n}",
+  "headers": {
+    "host": "127.0.0.1:4318",
+    "user-agent": "Stripe/1.0 (+https://stripe.com/docs/webhooks)",
+    "content-length": "1194",
+    "accept": "*/*; q=0.5, application/xml",
+    "cache-control": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "stripe-signature": "t=1789835515,v1=e581797cf2338135a5c68df41be5e6f84c4eb6a9a8c971875d8b97001bb2dc2a,v0=5eee571e0b64c134ca21a6d4087f502bfa52d569de57d109e3378a786a3ab205",
+    "accept-encoding": "gzip"
+  }
+}

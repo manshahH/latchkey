@@ -1,0 +1,13 @@
+{
+  "body": "{\n  \"id\": \"evt_1UHRBs7di7EQJawmxlc15PeQ\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-08-26.dahlia\",\n  \"created\": 1789835560,\n  \"data\": {\n    \"object\": {\n      \"id\": \"inpay_1UHRBS7di7EQJawmHRgB0cEW\",\n      \"object\": \"invoice_payment\",\n      \"amount_paid\": 1500,\n      \"amount_requested\": 1500,\n      \"created\": 1789835534,\n      \"currency\": \"usd\",\n      \"invoice\": \"in_1UHRBS7di7EQJawmfLN63bwa\",\n      \"is_default\": true,\n      \"livemode\": false,\n      \"payment\": {\n        \"payment_intent\": \"pi_3UHRBS7di7EQJawm1FN4nNpf\",\n        \"type\": \"payment_intent\"\n      },\n      \"status\": \"paid\",\n      \"status_transitions\": {\n        \"canceled_at\": null,\n        \"paid_at\": 1789835535\n      }\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 2,\n  \"request\": {\n    \"id\": null,\n    \"idempotency_key\": null\n  },\n  \"type\": \"invoice_payment.paid\"\n}",
+  "headers": {
+    "host": "127.0.0.1:4318",
+    "user-agent": "Stripe/1.0 (+https://stripe.com/docs/webhooks)",
+    "content-length": "841",
+    "accept": "*/*; q=0.5, application/xml",
+    "cache-control": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "stripe-signature": "t=1789835560,v1=a616f817a6c5aa959cdd2c2881d5a3c83a01f35f54736fa1b8f83e6ddf3a67e9,v0=9959ace46f705ecc763e2fef78d4df9fd2c8530545817482f4883475028de536",
+    "accept-encoding": "gzip"
+  }
+}

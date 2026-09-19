@@ -117,6 +117,9 @@ importers:
       '@latchkey/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@latchkey/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       graphile-worker:
         specifier: ^0.18.0
         version: 0.18.0(typescript@5.9.3)

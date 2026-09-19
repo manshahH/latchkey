@@ -94,31 +94,31 @@ Changing any row requires a decision entry.
 
 ```
 /
-├── CLAUDE.md                 agent entry point
-├── AGENTS.md                 pointer to CLAUDE.md
-├── docs/
-│   ├── product.md
-│   ├── architecture.md
-│   ├── implementation-plan.md
-│   └── milestones-and-logs.md
-├── apps/
-│   ├── web/                  Next.js
-│   ├── api/                  Hono
-│   └── worker/               Graphile Worker tasks + cron
-├── packages/
-│   ├── core/                 PURE domain logic: license fold, desired grants, policies. No I/O.
-│   ├── db/                   Drizzle schema, migrations (up + down), repositories
-│   ├── github/               GitHub App client, rate limit handling, typed errors
-│   ├── providers/            payment provider adapters + normalized event types
-│   ├── delivery/             registry builder, artifact storage, fingerprinting
-│   ├── crypto/               envelope encryption, token hashing
-│   ├── email/                EmailSender interface + templates
-│   ├── config/               env parsing with Zod, fails fast on boot
-│   ├── logging/              structured Pino logger with secret redaction
-│   └── testing/              fakes (FakeGitHub, FakeClock, provider fixtures), factories
-├── infra/                    CDK app
-└── fixtures/
-    └── webhooks/<provider>/  real sandbox payloads with signatures, captured not hand-written
+â”œâ”€â”€ CLAUDE.md                 agent entry point
+â”œâ”€â”€ AGENTS.md                 pointer to CLAUDE.md
+â”œâ”€â”€ docs/
+â”‚   â”œâ”€â”€ product.md
+â”‚   â”œâ”€â”€ architecture.md
+â”‚   â”œâ”€â”€ implementation-plan.md
+â”‚   â””â”€â”€ milestones-and-logs.md
+â”œâ”€â”€ apps/
+â”‚   â”œâ”€â”€ web/                  Next.js
+â”‚   â”œâ”€â”€ api/                  Hono
+â”‚   â””â”€â”€ worker/               Graphile Worker tasks + cron
+â”œâ”€â”€ packages/
+â”‚   â”œâ”€â”€ core/                 PURE domain logic: license fold, desired grants, policies. No I/O.
+â”‚   â”œâ”€â”€ db/                   Drizzle schema, migrations (up + down), repositories
+â”‚   â”œâ”€â”€ github/               GitHub App client, rate limit handling, typed errors
+â”‚   â”œâ”€â”€ providers/            payment provider adapters + normalized event types
+â”‚   â”œâ”€â”€ delivery/             registry builder, artifact storage, fingerprinting
+â”‚   â”œâ”€â”€ crypto/               envelope encryption, token hashing
+â”‚   â”œâ”€â”€ email/                EmailSender interface + templates
+â”‚   â”œâ”€â”€ config/               env parsing with Zod, fails fast on boot
+â”‚   â”œâ”€â”€ logging/              structured Pino logger with secret redaction
+â”‚   â””â”€â”€ testing/              fakes (FakeGitHub, FakeClock, provider fixtures), factories
+â”œâ”€â”€ infra/                    CDK app
+â””â”€â”€ fixtures/
+    â””â”€â”€ webhooks/<provider>/  real sandbox payloads with signatures, captured not hand-written
 ```
 
 **Dependency rule:** `core` is pure and may import only Zod for schema definitions. It has no I/O dependencies. `apps/*` depend on packages. Packages never import from `apps`. Lint enforces this.
@@ -411,6 +411,8 @@ Each adapter ships with:
 - Captured real sandbox fixtures (never hand-invented payloads) under `fixtures/webhooks/<provider>/`.
 - Signature tests: valid, tampered body, wrong secret, stale timestamp, missing header.
 - Mapping tests for every event in the table below.
+
+For the owner-scoped M4 pass, Paddle and Stripe are implemented. Polar and Lemon Squeezy are deferred until requested.
 
 ### 9.2 Starting event map (VERIFY against current provider docs before implementing)
 

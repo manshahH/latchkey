@@ -9,6 +9,7 @@ export {
   enqueueWebhookEvent,
   getProduct,
   getWebhookConnection,
+  rotateWebhookSecret,
   updateProductStatus
 } from "./repositories.js";
 export type {

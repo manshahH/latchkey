@@ -42,8 +42,35 @@ export const processStoredEvent = async (
       return;
     const payload = externalEvent.payload;
     const event = LicenseEventSchema.parse(payload.event);
-    const productId = String(payload.productId);
     const orderId = String(payload.externalOrderId);
+    const provider = typeof payload.provider === "string" ? payload.provider : "test";
+    const refs = await transaction<
+      { license_id: string }[]
+    >`SELECT license_id FROM license_external_refs WHERE provider = ${provider} AND external_order_id = ${orderId} FOR UPDATE`;
+    let licenseId = refs[0]?.license_id;
+    const mappedProduct =
+      typeof payload.providerConnectionId === "string" &&
+      typeof payload.externalProductId === "string"
+        ? (
+            await transaction<
+              { product_id: string; seats: number }[]
+            >`SELECT product_id, seats FROM provider_products WHERE provider_connection_id = ${payload.providerConnectionId}::uuid AND external_product_id = ${payload.externalProductId} AND external_price_id = ${typeof payload.externalPriceId === "string" ? payload.externalPriceId : ""}`
+          )[0]
+        : undefined;
+    let productId =
+      typeof payload.productId === "string" ? payload.productId : (mappedProduct?.product_id ?? "");
+    if (productId.length === 0 && licenseId !== undefined)
+      productId =
+        (
+          await transaction<
+            { product_id: string }[]
+          >`SELECT product_id FROM licenses WHERE id = ${licenseId}::uuid AND seller_id = ${externalEvent.seller_id}::uuid`
+        )[0]?.product_id ?? "";
+    if (productId.length === 0) {
+      await transaction`UPDATE external_events SET process_error = 'unmapped_product' WHERE id = ${externalEvent.id}::uuid`;
+      await transaction`INSERT INTO drift_items (id, seller_id, kind, details) VALUES (${randomUUID()}::uuid, ${externalEvent.seller_id}::uuid, 'unmapped_product', ${JSON.stringify({ externalProductId: payload.externalProductId, externalPriceId: payload.externalPriceId })})`;
+      return;
+    }
     const products = await transaction<
       ProductRow[]
     >`SELECT id, revoke_policy FROM products WHERE id = ${productId}::uuid AND seller_id = ${externalEvent.seller_id}::uuid`;
@@ -53,13 +80,12 @@ export const processStoredEvent = async (
       await transaction`INSERT INTO drift_items (id, seller_id, kind, details) VALUES (${randomUUID()}::uuid, ${externalEvent.seller_id}::uuid, 'unmapped_product', ${JSON.stringify({ productId })})`;
       return;
     }
-    const refs = await transaction<
-      { license_id: string }[]
-    >`SELECT license_id FROM license_external_refs WHERE provider = 'test' AND external_order_id = ${orderId} FOR UPDATE`;
-    let licenseId = refs[0]?.license_id;
     if (licenseId === undefined) {
       licenseId = randomUUID();
-      const seats = Number(payload.seats ?? 1);
+      const seats =
+        typeof payload.seats === "number" && Number.isInteger(payload.seats) && payload.seats > 0
+          ? payload.seats
+          : (mappedProduct?.seats ?? 1);
       const githubUserId =
         typeof payload.githubUserId === "string" ? BigInt(payload.githubUserId) : null;
       let buyerUserId: string | null = null;
@@ -76,7 +102,7 @@ export const processStoredEvent = async (
       const purchaseEmail =
         typeof payload.purchaseEmail === "string" ? payload.purchaseEmail : "buyer@example.com";
       await transaction`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at, purchase_email) VALUES (${licenseId}::uuid, ${externalEvent.seller_id}::uuid, ${product.id}::uuid, 'ended', 'one_time', ${seats}, ${event.occurredAt.toISOString()}, ${purchaseEmail})`;
-      await transaction`INSERT INTO license_external_refs (id, license_id, provider, external_order_id) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, 'test', ${orderId})`;
+      await transaction`INSERT INTO license_external_refs (id, license_id, provider, external_order_id) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${provider}, ${orderId})`;
       for (let index = 0; index < seats; index += 1)
         await transaction`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${index === 0 ? buyerUserId : null}::uuid, ${index === 0 && buyerUserId !== null ? event.occurredAt.toISOString() : null})`;
     }

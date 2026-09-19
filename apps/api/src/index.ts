@@ -7,13 +7,25 @@ import {
 } from "@latchkey/db";
 import type { Sql } from "postgres";
 import { verifyGitHubWebhookSignature } from "@latchkey/github";
-import { TestProvider } from "@latchkey/providers";
+import {
+  normalizePaddleWebhook,
+  normalizeStripeWebhook,
+  TestProvider,
+  verifyPaddleWebhook,
+  verifyStripeWebhook
+} from "@latchkey/providers";
 
 export interface WebhookStore {
   findConnection(
     provider: string,
     connectionId: string
-  ): Promise<{ sellerId: string; webhookSecret: string } | null>;
+  ): Promise<{
+    sellerId: string;
+    webhookSecret: string;
+    previousWebhookSecret?: string;
+    previousWebhookSecretExpiresAt?: Date | null;
+    mode: "test" | "live";
+  } | null>;
   storeVerifiedEvent(input: {
     sellerId: string;
     source: string;
@@ -28,6 +40,11 @@ export interface WebhookMetric {
   increment(name: string, labels: { provider: string }): void;
 }
 
+const stripeMode = (payload: Record<string, unknown>): "test" | "live" | null => {
+  const live = payload.livemode;
+  return typeof live === "boolean" ? (live ? "live" : "test") : null;
+};
+
 /** Verification precedes persistence, and persistence plus enqueue is delegated to one database transaction. */
 export const createApi = (store: WebhookStore, now: () => Date, metrics?: WebhookMetric) => {
   const app = new Hono();
@@ -35,29 +52,90 @@ export const createApi = (store: WebhookStore, now: () => Date, metrics?: Webhoo
     const provider = context.req.param("provider");
     const connection = await store.findConnection(provider, context.req.param("connectionId"));
     const body = await context.req.text();
+    const headers = Object.fromEntries(context.req.raw.headers.entries());
+    const previousSecret =
+      connection?.previousWebhookSecretExpiresAt !== undefined &&
+      connection.previousWebhookSecretExpiresAt !== null &&
+      connection.previousWebhookSecretExpiresAt > now()
+        ? connection.previousWebhookSecret
+        : undefined;
     const verified =
       provider === "test" && connection !== null
-        ? TestProvider.verify(
+        ? (TestProvider.verify(
             body,
             context.req.header("x-webhook-secret") ?? "",
             connection.webhookSecret
-          )
-        : null;
-    if (verified === null || connection === null) {
+          ) ??
+          (previousSecret === undefined
+            ? null
+            : TestProvider.verify(
+                body,
+                context.req.header("x-webhook-secret") ?? "",
+                previousSecret
+              )))
+        : provider === "paddle" && connection !== null
+          ? (verifyPaddleWebhook({ body, headers }, connection.webhookSecret, now()) ??
+            (previousSecret === undefined
+              ? null
+              : verifyPaddleWebhook({ body, headers }, previousSecret, now())))
+          : provider === "stripe" && connection !== null
+            ? (verifyStripeWebhook({ body, headers }, connection.webhookSecret, now()) ??
+              (previousSecret === undefined
+                ? null
+                : verifyStripeWebhook({ body, headers }, previousSecret, now())))
+            : null;
+    if (
+      verified === null ||
+      connection === null ||
+      (provider === "stripe" && stripeMode(verified) !== connection.mode)
+    ) {
       metrics?.increment("webhook_signature_invalid", { provider });
       return context.json(
         { error: { code: "auth_error", message: "Webhook could not be verified." } },
         401
       );
     }
-    await store.storeVerifiedEvent({
-      sellerId: connection.sellerId,
-      source: provider,
-      externalEventId: TestProvider.eventId(verified),
-      type: verified.event.type,
-      payload: JSON.parse(body) as Record<string, unknown>,
-      now: now()
-    });
+    const normalized =
+      provider === "test"
+        ? [
+            {
+              event: TestProvider.normalize(
+                verified as import("@latchkey/providers").VerifiedWebhook
+              ),
+              externalOrderId: (verified as import("@latchkey/providers").VerifiedWebhook)
+                .externalOrderId,
+              externalProductId: (verified as import("@latchkey/providers").VerifiedWebhook)
+                .productId,
+              externalPriceId: null,
+              purchaseEmail: (verified as import("@latchkey/providers").VerifiedWebhook)
+                .purchaseEmail,
+              claimIntentId: null,
+              seats: 1
+            }
+          ]
+        : provider === "paddle"
+          ? normalizePaddleWebhook(verified, now())
+          : normalizeStripeWebhook(verified, now());
+    for (const event of normalized)
+      await store.storeVerifiedEvent({
+        sellerId: connection.sellerId,
+        source: provider,
+        externalEventId: event.event.id,
+        type: event.event.type,
+        payload: {
+          raw: JSON.parse(body) as Record<string, unknown>,
+          provider,
+          event: event.event,
+          externalOrderId: event.externalOrderId,
+          externalProductId: event.externalProductId,
+          externalPriceId: event.externalPriceId,
+          purchaseEmail: event.purchaseEmail,
+          claimIntentId: event.claimIntentId,
+          providerConnectionId: context.req.param("connectionId"),
+          seats: event.seats
+        },
+        now: now()
+      });
     return context.json({ received: true });
   });
   return app;

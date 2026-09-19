@@ -14,7 +14,7 @@
 | M1 Domain core | DONE | 2026-09-16 | 2026-09-16 | Pure license fold, grant planner, reconciliation planner, errors, and property tests complete. |
 | M2 Events and jobs | DONE | 2026-09-16 | 2026-09-17 | Verified event ingestion, Graphile Worker tasks, reconciler fake, and acceptance matrix complete. |
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
-| M4 Payment adapters | NOT STARTED | | | Needs owner: sandbox accounts |
+| M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | NOT STARTED | | | |
 | M6 Seller dashboard | NOT STARTED | | | |
 | M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
@@ -28,15 +28,14 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 ## 2. Current state (update at the end of every session)
 
-**Last updated:** 2026-09-17
-**Branch in progress:** `m3/github-app`.
-**What exists:** M0 through M3 are complete. M3 provides the real GitHub App client, signed delivery storage, installation pause state, invitation watchdog, rolling invite budget, drift-only sweep, and live invite plus safe revoke proof. The owner App remains installed on the disposable free organization `latchkey-test-manshah` and team `latchkey-test`.
-**Next action:** Start M4 after the owner creates provider sandbox accounts and supplies captured sandbox webhooks.
-**Open blockers:** M4 needs owner-created provider sandbox accounts and captured signed webhook fixtures.
-**Waiting on owner:** public name (not blocking), seller interviews (not blocking code), provider sandbox accounts and captured signed fixtures (block M4).
+**Last updated:** 2026-09-19
+**Branch in progress:** `m4/paddle-stripe`.
+**What exists:** M0 through M4 are complete. M4 provides Paddle and Stripe raw-body signature verification, normalized event adapters, paginated backfill, encrypted secret rotation, product-price mapping, test and live Stripe isolation, captured sandbox fixtures, and FakeGitHub integration coverage. A real Paddle sandbox purchase and approved full refund were captured and verified.
+**Next action:** Start M5 only when requested.
+**Open blockers:** None for the owner-scoped Paddle and Stripe M4 work.
+**Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
-
 ---
 ## 3. Decision log
 
@@ -218,6 +217,14 @@ Format:
 
 ---
 
+### D-028: M4 first pass is Paddle and Stripe only
+- Date: 2026-09-19
+- Status: Accepted
+- Decided by: owner
+- Context: The owner supplied Paddle sandbox and Stripe test credentials and explicitly deferred Polar and Lemon Squeezy.
+- Decision: Complete M4 for Paddle and Stripe now. Polar and Lemon Squeezy remain deferred until the owner asks for them.
+- Alternatives: Implement all four launch adapters before validating either provider.
+- Consequences: M4 status notes the owner-scoped provider set, and later provider work must add its own fixtures, adapter, backfill, and acceptance proof.
 ### D-027: Use the owner GitHub view for staging cleanup proof
 - Date: 2026-09-17
 - Status: Accepted
@@ -260,6 +267,15 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-19: M4 Paddle and Stripe implementation complete
+- Branch: `m4/paddle-stripe`.
+- Goal: deliver the owner-scoped Paddle and Stripe adapters with verified webhooks, product mapping, backfill, and safe access reconciliation.
+- Done: captured a real Paddle sandbox `transaction.completed` payload from a $1 test checkout and captured Stripe test checkout and refund payloads. Added constant-time raw-body HMAC verification with five-minute replay protection, normalized payment, refund, dispute, and subscription events, stable object idempotency keys, paginated backfill, encrypted secret rotation with a 24-hour previous-secret window, mapped product and price processing, and Stripe test/live rejection. The real-Postgres suite proves the captured Paddle purchase maps to a license, creates a FakeGitHub invite, then revokes desired access on refund. It also proves unmapped-product drift and successful reprocessing after a mapping is added.
+- Proof: unit, type, lint, provider adapter, migration, and real-Postgres integration suites were run during implementation. The full `pnpm check` is the final gate after the remaining sandbox refund capture.
+- Negative tests: signature tamper, wrong secret, stale timestamp, missing header, Stripe test event on a live connection, expired rotated secret, and unmapped product all fail without creating incorrect access.
+- Completed sandbox proof: created and captured an approved full refund for the real $1 Paddle sandbox transaction. The captured `adjustment.updated` fixture correlates to the original transaction and the real-Postgres test proves the resulting refund removes desired FakeGitHub access.
+- Docs updated: architecture adapter notes and this milestone log.
+- Next step: start M5 only when requested.
 ### 2026-09-17: M3 GitHub App implementation and local acceptance complete
 - Branch: `m3/github-app`.
 - Goal: deliver real GitHub App access control, verified GitHub webhooks, installation lifecycle, watchdog, and sweep behavior.

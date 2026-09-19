@@ -1,0 +1,13 @@
+{
+  "body": "{\n  \"id\": \"evt_1UHRBR7di7EQJawmLWxtjvIM\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-08-26.dahlia\",\n  \"created\": 1789835533,\n  \"data\": {\n    \"object\": {\n      \"id\": \"price_1UHRBR7di7EQJawmt8R0z3p9\",\n      \"object\": \"plan\",\n      \"active\": true,\n      \"amount\": 1500,\n      \"amount_decimal\": \"1500\",\n      \"billing_scheme\": \"per_unit\",\n      \"created\": 1789835533,\n      \"currency\": \"usd\",\n      \"interval\": \"month\",\n      \"interval_count\": 1,\n      \"livemode\": false,\n      \"metadata\": {},\n      \"meter\": null,\n      \"nickname\": null,\n      \"product\": \"prod_VI1DGnZXe71fNZ\",\n      \"tiers_mode\": null,\n      \"transform_usage\": null,\n      \"trial_period_days\": null,\n      \"usage_type\": \"licensed\"\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 2,\n  \"request\": {\n    \"id\": \"req_47hRTmYOL4Oe8j\",\n    \"idempotency_key\": \"03d7910f-6d84-4a9f-9cb1-7f56f49b60a0\"\n  },\n  \"type\": \"plan.created\"\n}",
+  "headers": {
+    "host": "127.0.0.1:4318",
+    "user-agent": "Stripe/1.0 (+https://stripe.com/docs/webhooks)",
+    "content-length": "894",
+    "accept": "*/*; q=0.5, application/xml",
+    "cache-control": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "stripe-signature": "t=1789835533,v1=fd5c3cee4dc65d2825ed8393c8fe413bb6faca6e8b5198b21603379681e007ae,v0=db7a3877c12f670d94d1f7e54f91bef4e4357f9586d98afa15f0185db8d5f556",
+    "accept-encoding": "gzip"
+  }
+}

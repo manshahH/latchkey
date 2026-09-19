@@ -1,0 +1,2 @@
+ALTER TABLE provider_connections DROP COLUMN previous_webhook_secret_expires_at;
+ALTER TABLE provider_connections DROP COLUMN previous_webhook_secret_enc;

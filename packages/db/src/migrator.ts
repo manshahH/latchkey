@@ -23,6 +23,11 @@ const migrations: readonly Migration[] = [
     downFile: new URL("../migrations/0002_github_app.down.sql", import.meta.url),
     id: "0002_github_app",
     upFile: new URL("../migrations/0002_github_app.sql", import.meta.url)
+  },
+  {
+    downFile: new URL("../migrations/0003_provider_secret_rotation.down.sql", import.meta.url),
+    id: "0003_provider_secret_rotation",
+    upFile: new URL("../migrations/0003_provider_secret_rotation.sql", import.meta.url)
   }
 ];
 

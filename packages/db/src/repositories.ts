@@ -18,6 +18,9 @@ export interface WebhookConnection {
   id: string;
   sellerId: string;
   webhookSecretEnc: string;
+  previousWebhookSecretEnc: string | null;
+  previousWebhookSecretExpiresAt: Date | null;
+  mode: "test" | "live";
 }
 
 export interface SecretDecryptor {
@@ -28,7 +31,13 @@ export interface ProductionWebhookStore {
   findConnection(
     provider: string,
     connectionId: string
-  ): Promise<{ sellerId: string; webhookSecret: string } | null>;
+  ): Promise<{
+    sellerId: string;
+    webhookSecret: string;
+    previousWebhookSecret?: string;
+    previousWebhookSecretExpiresAt?: Date | null;
+    mode: "test" | "live";
+  } | null>;
   storeVerifiedEvent(input: {
     sellerId: string;
     source: string;
@@ -63,16 +72,54 @@ export const getWebhookConnection = async (
   provider: string,
   connectionId: string
 ): Promise<WebhookConnection | null> => {
-  const rows = await sql<{ id: string; seller_id: string; webhook_secret_enc: string }[]>`
-    SELECT id, seller_id, webhook_secret_enc FROM provider_connections
+  const rows = await sql<
+    {
+      id: string;
+      seller_id: string;
+      webhook_secret_enc: string;
+      previous_webhook_secret_enc: string | null;
+      previous_webhook_secret_expires_at: Date | null;
+      mode: "test" | "live";
+    }[]
+  >`
+    SELECT id, seller_id, webhook_secret_enc, previous_webhook_secret_enc, previous_webhook_secret_expires_at, mode FROM provider_connections
     WHERE id = ${connectionId}::uuid AND provider = ${provider} AND status = 'active'
   `;
   const row = rows[0];
   return row === undefined
     ? null
-    : { id: row.id, sellerId: row.seller_id, webhookSecretEnc: row.webhook_secret_enc };
+    : {
+        id: row.id,
+        sellerId: row.seller_id,
+        webhookSecretEnc: row.webhook_secret_enc,
+        previousWebhookSecretEnc: row.previous_webhook_secret_enc,
+        previousWebhookSecretExpiresAt:
+          row.previous_webhook_secret_expires_at === null
+            ? null
+            : new Date(row.previous_webhook_secret_expires_at),
+        mode: row.mode
+      };
 };
 
+/** Rotates an encrypted webhook secret while accepting the prior encrypted value for 24 hours. */
+export const rotateWebhookSecret = async (
+  sql: Queryable,
+  connectionId: string,
+  encryptedSecret: string,
+  now: Date
+): Promise<void> => {
+  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const rows = await sql<{ id: string }[]>`
+    UPDATE provider_connections
+    SET previous_webhook_secret_enc = webhook_secret_enc,
+        previous_webhook_secret_expires_at = ${expiresAt.toISOString()},
+        webhook_secret_enc = ${encryptedSecret},
+        key_version = key_version + 1
+    WHERE id = ${connectionId}::uuid
+    RETURNING id
+  `;
+  if (rows[0] === undefined) throw new NotFoundError("Provider connection was not found.");
+};
 export const enqueueJob = async (
   sql: Queryable,
   input: Omit<QueuedJob, "id" | "attempts"> & { id?: string }
@@ -136,7 +183,13 @@ export const createProductionWebhookStore = (
       ? null
       : {
           sellerId: connection.sellerId,
-          webhookSecret: decryptor.decrypt(connection.webhookSecretEnc)
+          webhookSecret: decryptor.decrypt(connection.webhookSecretEnc),
+          previousWebhookSecret:
+            connection.previousWebhookSecretEnc === null
+              ? undefined
+              : decryptor.decrypt(connection.previousWebhookSecretEnc),
+          previousWebhookSecretExpiresAt: connection.previousWebhookSecretExpiresAt,
+          mode: connection.mode
         };
   },
   storeVerifiedEvent: (input) => enqueueWebhookEvent(sql, input)

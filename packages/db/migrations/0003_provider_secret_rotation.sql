@@ -1,0 +1,2 @@
+ALTER TABLE provider_connections ADD COLUMN previous_webhook_secret_enc text;
+ALTER TABLE provider_connections ADD COLUMN previous_webhook_secret_expires_at timestamptz;
