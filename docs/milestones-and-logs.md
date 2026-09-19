@@ -268,13 +268,14 @@ Format (newest first):
 ```
 
 ### 2026-09-19: M4 Paddle and Stripe implementation complete
-- Branch: `m4/paddle-stripe`.
+- Branch / commit: `main`, `f21d775` (`feat: add Paddle and Stripe payment adapters`).
 - Goal: deliver the owner-scoped Paddle and Stripe adapters with verified webhooks, product mapping, backfill, and safe access reconciliation.
 - Done: captured a real Paddle sandbox `transaction.completed` payload from a $1 test checkout and captured Stripe test checkout and refund payloads. Added constant-time raw-body HMAC verification with five-minute replay protection, normalized payment, refund, dispute, and subscription events, stable object idempotency keys, paginated backfill, encrypted secret rotation with a 24-hour previous-secret window, mapped product and price processing, and Stripe test/live rejection. The real-Postgres suite proves the captured Paddle purchase maps to a license, creates a FakeGitHub invite, then revokes desired access on refund. It also proves unmapped-product drift and successful reprocessing after a mapping is added.
-- Proof: unit, type, lint, provider adapter, migration, and real-Postgres integration suites were run during implementation. The full `pnpm check` is the final gate after the remaining sandbox refund capture.
+- Proof: `pnpm test` passed 20 files and 60 tests. Core coverage passed at 96.71% lines. The focused real-Postgres M4 suite passed the captured Paddle purchase-to-invite, refund-to-revoke, unmapped-product reprocess, secret-rotation, and migration checks. Browser smoke, production build, Prettier, lint, typecheck, and whitespace checks passed.
 - Negative tests: signature tamper, wrong secret, stale timestamp, missing header, Stripe test event on a live connection, expired rotated secret, and unmapped product all fail without creating incorrect access.
 - Completed sandbox proof: created and captured an approved full refund for the real $1 Paddle sandbox transaction. The captured `adjustment.updated` fixture correlates to the original transaction and the real-Postgres test proves the resulting refund removes desired FakeGitHub access.
-- Docs updated: architecture adapter notes and this milestone log.
+- Docs updated: architecture adapter notes, the M4 status board, current state, and this milestone log.
+- Handoff: local `main` was fast-forwarded to the M4 commit; the owner approved publication to `origin/main`.
 - Next step: start M5 only when requested.
 ### 2026-09-17: M3 GitHub App implementation and local acceptance complete
 - Branch: `m3/github-app`.
