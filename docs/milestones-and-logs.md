@@ -30,7 +30,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-21
 **Branch in progress:** `m6/seller-dashboard`.
-**What exists:** M0 through M5 are complete. A paid purchase without a GitHub identity creates one random, hashed claim token and sends its link to the purchase email. Buyer GitHub OAuth sessions, CSRF validation, claim, access, mistaken-account release, purchases, rate-limited resend, buyer isolation, email templates, and dedupe persistence are covered by real-Postgres and browser tests.
+**What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, export data, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
 **Next action:** Finish M6 dashboard UI, asynchronous S3 export storage, and authorized staging purchase and refund proof.
 **Open blockers:** None for the owner-scoped Paddle and Stripe M4 work.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
@@ -267,6 +267,13 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-22: M6 dashboard local implementation extended
+- Branch / commits: `m6/seller-dashboard`; follow-up commit pending.
+- Done: added onboarding state that remains incomplete until a test payment and observed access removal exist, installation and provider failure banners, owner-only member role changes, and a responsive seller dashboard. The dashboard is rendered through a session-bound route and escapes seller data before display.
+- Proof: focused M6 real-Postgres integration passed 5 tests. Playwright passed the dashboard at 400px and 1280px, saving `test-results/m6-dashboard-mobile.png` and `test-results/m6-dashboard-desktop.png`. Lint, typecheck, build, and formatting passed. The full integration run began after the unit and core coverage commands passed, but this Windows runner stopped returning stream output before the final summary.
+- Negative tests: viewer revoke and cross-seller list/export remain denied without rows changing; only owner can change a member role. The prior permission mutation proof applies to all role ranks.
+- Not done / blocked: M6 cannot be marked done without a configured non-production S3 bucket for persistent export objects and short-lived signed links, plus an authorized staging provider test purchase and refund. Creating or selecting an AWS bucket and running a provider checkout are owner-authorized external actions. The local checklist proof is not a substitute for that staging acceptance criterion.
+- Next step: obtain the non-production S3 bucket and staging provider authorization, then wire and run the final external acceptance proof.
 ### 2026-09-21: M6 seller dashboard in progress
 - Branch / commits: `m6/seller-dashboard`; `173b66f` (`feat(seller): add dashboard safety API`).
 - Goal: let sellers manage products, access, and support work safely without exposing another seller's data.

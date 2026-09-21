@@ -196,3 +196,63 @@ export const requestSellerExport = async (
     await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'export_requested', ${JSON.stringify({ sellerId })}, ${now.toISOString()})`;
   });
 };
+
+export const getSellerOnboarding = async (sql: Queryable, sellerId: string) => {
+  const [installation, connection, product, mapping, purchase, refund] = await Promise.all([
+    sql<
+      { count: number }[]
+    >`SELECT count(*)::integer AS count FROM github_installations WHERE seller_id = ${sellerId}::uuid AND uninstalled_at IS NULL AND suspended_at IS NULL`,
+    sql<
+      { count: number }[]
+    >`SELECT count(*)::integer AS count FROM provider_connections WHERE seller_id = ${sellerId}::uuid AND status = 'active'`,
+    sql<
+      { count: number }[]
+    >`SELECT count(*)::integer AS count FROM products WHERE seller_id = ${sellerId}::uuid`,
+    sql<
+      { count: number }[]
+    >`SELECT count(*)::integer AS count FROM provider_products JOIN products ON products.id = provider_products.product_id WHERE products.seller_id = ${sellerId}::uuid`,
+    sql<
+      { count: number }[]
+    >`SELECT count(*)::integer AS count FROM external_events WHERE seller_id = ${sellerId}::uuid AND type IN ('PaymentSucceeded', 'SubscriptionActivated')`,
+    sql<
+      { count: number }[]
+    >`SELECT count(*)::integer AS count FROM activity_log WHERE seller_id = ${sellerId}::uuid AND action = 'reconciled_removed'`
+  ]);
+  const steps = {
+    github: installation[0]?.count !== 0,
+    provider: connection[0]?.count !== 0,
+    product: product[0]?.count !== 0,
+    mapping: mapping[0]?.count !== 0,
+    testPurchase: purchase[0]?.count !== 0,
+    testRefund: refund[0]?.count !== 0
+  };
+  return { ...steps, ready: Object.values(steps).every(Boolean) };
+};
+export const listSellerBanners = async (sql: Queryable, sellerId: string) => sql<
+  { kind: string; message: string }[]
+>`
+  SELECT 'installation_lost' AS kind, 'GitHub access needs reconnecting. Install the GitHub App again to keep access working.' AS message FROM github_installations WHERE seller_id = ${sellerId}::uuid AND (uninstalled_at IS NOT NULL OR suspended_at IS NOT NULL)
+  UNION ALL
+  SELECT 'provider_failing' AS kind, 'Your payment connection needs attention. Check its key and webhook settings.' AS message FROM provider_connections WHERE seller_id = ${sellerId}::uuid AND status <> 'active'`;
+export const listSellerMembers = async (sql: Queryable, sellerId: string) =>
+  sql<
+    { userId: string; role: SellerRole; login: string | null }[]
+  >`SELECT seller_members.user_id AS "userId", seller_members.role, users.github_login AS login FROM seller_members JOIN users ON users.id = seller_members.user_id WHERE seller_members.seller_id = ${sellerId}::uuid ORDER BY seller_members.role, users.github_login`;
+export const setSellerMemberRole = async (
+  sql: Sql,
+  sellerId: string,
+  targetUserId: string,
+  role: SellerRole,
+  actor: string,
+  now: Date
+): Promise<void> => {
+  await sql.begin(async (tx) => {
+    const changed = (
+      await tx<
+        { user_id: string }[]
+      >`UPDATE seller_members SET role = ${role} WHERE seller_id = ${sellerId}::uuid AND user_id = ${targetUserId}::uuid RETURNING user_id`
+    )[0];
+    if (!changed) throw new NotFoundError("Member was not found.");
+    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'member_role_changed', ${JSON.stringify({ sellerId, targetUserId, role })}, ${now.toISOString()})`;
+  });
+};

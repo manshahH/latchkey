@@ -7,7 +7,10 @@ import {
   createSeller,
   createSellerProduct,
   exportSellerData,
+  getSellerOnboarding,
+  listSellerBanners,
   listSellerDrift,
+  listSellerMembers,
   listSellerLicenses,
   listSellerProducts,
   requireBuyerSession,
@@ -15,7 +18,8 @@ import {
   requestSellerExport,
   resolveSellerDrift,
   sellerLicenseTimeline,
-  setManualAccess
+  setManualAccess,
+  setSellerMemberRole
 } from "@latchkey/db";
 import type { Sql } from "postgres";
 
@@ -58,6 +62,39 @@ export const createSellerApi = ({ sql, now }: SellerApiOptions) => {
     const userId = await session(c, true);
     const input = await body(c.req.raw);
     return c.json({ id: await createSeller(sql, userId, text(input, "slug"), now()) }, 201);
+  });
+  app.get("/sellers/:sellerId/onboarding", async (c) => {
+    const user = await session(c);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "viewer");
+    return c.json(await getSellerOnboarding(sql, sellerId));
+  });
+  app.get("/sellers/:sellerId/banners", async (c) => {
+    const user = await session(c);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "viewer");
+    return c.json(await listSellerBanners(sql, sellerId));
+  });
+  app.get("/sellers/:sellerId/members", async (c) => {
+    const user = await session(c);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "viewer");
+    return c.json(await listSellerMembers(sql, sellerId));
+  });
+  app.post("/sellers/:sellerId/members/:userId", async (c) => {
+    const user = await session(c, true);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "owner");
+    const input = await body(c.req.raw);
+    await setSellerMemberRole(
+      sql,
+      sellerId,
+      id.parse(c.req.param("userId")),
+      z.enum(["owner", "admin", "viewer"]).parse(input.role),
+      user,
+      now()
+    );
+    return c.json({ updated: true });
   });
   app.get("/sellers/:sellerId/products", async (c) => {
     const user = await session(c);

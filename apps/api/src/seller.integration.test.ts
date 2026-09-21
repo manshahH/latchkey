@@ -29,9 +29,9 @@ beforeEach(async () => {
 const signedIn = async (github: bigint, seller: string, role: string) => {
   const session = await createBuyerSession(
     database.sql,
-    { githubUserId: github, login: `u${github}` },
-    `session-${github}-${"x".repeat(40)}`,
-    `csrf-${github}-${"x".repeat(40)}`,
+    { githubUserId: github, login: `u${String(github)}` },
+    `session-${String(github)}-${"x".repeat(40)}`,
+    `csrf-${String(github)}-${"x".repeat(40)}`,
     now
   );
   await database.sql`INSERT INTO seller_members (seller_id, user_id, role) VALUES (${seller}::uuid, ${session.userId}::uuid, ${role})`;
@@ -86,4 +86,41 @@ test("archiving a product with licenses preserves its access records", async () 
   expect(await database.sql`SELECT status FROM products WHERE id = ${productA}::uuid`).toEqual([
     { status: "archived" }
   ]);
+}, 120000);
+
+test("onboarding turns green only after an observed test refund", async () => {
+  const owner = await signedIn(6n, sellerA, "owner");
+  await database.sql`INSERT INTO github_installations (installation_id, seller_id, account_login, account_type) VALUES (99, ${sellerA}::uuid, 'seller-a', 'Organization')`;
+  await database.sql`INSERT INTO provider_connections (id, seller_id, provider, webhook_secret_enc, mode) VALUES ('00000000-0000-0000-0000-000000000091'::uuid, ${sellerA}::uuid, 'stripe', 'encrypted', 'test')`;
+  await database.sql`INSERT INTO provider_products (id, provider_connection_id, external_product_id, external_price_id, product_id) VALUES ('00000000-0000-0000-0000-000000000092'::uuid, '00000000-0000-0000-0000-000000000091'::uuid, 'prod_test', 'price_test', ${productA}::uuid)`;
+  await database.sql`INSERT INTO external_events (id, seller_id, source, external_event_id, type, payload) VALUES ('00000000-0000-0000-0000-000000000093'::uuid, ${sellerA}::uuid, 'stripe', 'test-payment', 'PaymentSucceeded', '{}'::jsonb)`;
+  const waiting = (await (await request(`/sellers/${sellerA}/onboarding`, owner)).json()) as {
+    ready: boolean;
+    testRefund: boolean;
+  };
+  expect(waiting).toMatchObject({ ready: false, testRefund: false });
+  await database.sql`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor) VALUES ('00000000-0000-0000-0000-000000000094'::uuid, ${sellerA}::uuid, 'license', ${licenseA}::uuid, 'reconciled_removed', 'Test refund removed access', 'system')`;
+  const ready = (await (await request(`/sellers/${sellerA}/onboarding`, owner)).json()) as {
+    ready: boolean;
+    testRefund: boolean;
+  };
+  expect(ready).toMatchObject({ ready: true, testRefund: true });
+}, 120000);
+
+test("only an owner can change a member role", async () => {
+  const owner = await signedIn(7n, sellerA, "owner");
+  const admin = await signedIn(8n, sellerA, "admin");
+  const viewer = await signedIn(9n, sellerA, "viewer");
+  const denied = await request(`/sellers/${sellerA}/members/${viewer.userId}`, admin, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-csrf-token": admin.csrfToken },
+    body: JSON.stringify({ role: "admin" })
+  });
+  expect(denied.status).toBe(403);
+  const allowed = await request(`/sellers/${sellerA}/members/${viewer.userId}`, owner, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-csrf-token": owner.csrfToken },
+    body: JSON.stringify({ role: "admin" })
+  });
+  expect(allowed.status).toBe(200);
 }, 120000);
