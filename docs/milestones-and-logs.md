@@ -16,7 +16,7 @@
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
-| M6 Seller dashboard | BLOCKED | 2026-09-21 | | Local dashboard work is verified. Needs a non-production S3 bucket and authorized staging provider purchase/refund proof. |
+| M6 Seller dashboard | BLOCKED | 2026-09-21 | | Local dashboard, private R2 exports, Paddle authentication, and the reversible GitHub live contract are verified. There is no deployed staging API or public webhook receiver for the provider-to-revoke proof. |
 | M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
 | M8 Registry delivery | NOT STARTED | | | |
 | M9 Team licenses | NOT STARTED | | | |
@@ -28,11 +28,11 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 ## 2. Current state (update at the end of every session)
 
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-22
 **Branch in progress:** `m6/seller-dashboard`.
 **What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, export data, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
-**Next action:** Finish M6 dashboard UI, asynchronous S3 export storage, and authorized staging purchase and refund proof.
-**Open blockers:** M6 export storage is wired to the private Cloudflare R2 bucket and local credentials are present. The remaining blocker is authorization to run the staging provider purchase and refund acceptance proof.
+**Next action:** Create an approved non-production staging receiver, or explicitly move the staging purchase/refund acceptance proof to M7 when staging infrastructure is built.
+**Open blockers:** The required staging environment does not exist in this repository. There is no running API server, public webhook receiver, tunnel client, or deployment configuration. A new Paddle checkout would be unobservable, so it has not been created.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -217,6 +217,14 @@ Format:
 
 ---
 
+### D-030: Resolve external dependency lint against each workspace manifest
+- Date: 2026-09-22
+- Status: Accepted
+- Decided by: agent
+- Context: M6 preflight found `import/no-extraneous-dependencies` reading the repository root manifest for API, worker, and delivery source files. It falsely rejected dependencies that are declared and lockfile-resolved in their owning workspaces. Once the intended manifests were reached, the same check exposed UTF-8 byte-order marks in the affected package files.
+- Decision: configure the shared lint rule with a manifest path for each affected workspace.
+- Alternatives: duplicate all runtime dependencies in the root manifest (would make ownership unclear); disable the rule (would remove a useful dependency gate).
+- Consequences: dependency ownership remains with its workspace and `pnpm lint` checks the correct manifest.
 ### D-029: Use a dedicated Cloudflare R2 bucket for seller exports
 - Date: 2026-09-22
 - Status: Accepted
@@ -275,6 +283,18 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-22: M6 authorized external-proof preflight
+- Branch / commits: `m6/seller-dashboard`; working tree changes pending review.
+- Goal: use the owner-authorized Paddle sandbox credential to run the remaining M6 purchase, refund, and GitHub revoke acceptance proof without exposing credentials.
+- Done: authenticated the local Paddle sandbox API key with a status-only request. The saved sandbox checkout link returned HTTP 200. The documented `pnpm test:github-live` contract passed after loading local configuration for that one process: it removed the disposable test-team member, confirmed organization membership remained, and restored the member. The key can read completed transactions but does not have permission to read Paddle notification settings.
+- Proof: `pnpm lint` passed after correcting workspace-manifest resolution and removing UTF-8 byte-order marks from the affected manifests. `pnpm check` reached lint and TypeScript type checking, but this Windows runner returned before a terminal summary, so it is not recorded as passing.
+- Negative tests added and how each was proven non-vacuous: existing M6 role and tenant gates remain covered by the recorded focused integration mutation proof. No new behavior gate was added in this preflight-only session.
+- Decisions made: D-030.
+- Edge cases considered: an expired checkout link, a restricted Paddle key, a stale tunnel, an unobservable webhook, and a GitHub team removal that could affect organization membership. The checkout was reachable, the key authenticated, the tunnel was last active on 2026-09-19, and the real GitHub safety contract passed.
+- Problems hit and how solved: lint initially resolved the root manifest for nested workspaces. Scoping the rule surfaced UTF-8 byte-order marks in API, worker, and delivery manifests. The markers were removed without changing their JSON content, then lint passed.
+- Not done / deferred: no new checkout or refund was created. The repository has no API server, deployed staging environment, public webhook receiver, or active tunnel, so a real provider event could not be safely observed, processed, and tied to a GitHub revoke.
+- Docs updated: status board, current state, decision D-030, and this work log.
+- Next step: owner chooses whether to build a temporary non-production staging receiver now or move this staging acceptance proof to M7, where deployment is already scoped.
 ### 2026-09-22: M6 private R2 export wiring
 - Branch / commits: `m6/seller-dashboard`; `12fee79` (`feat(exports): store seller exports in R2`).
 - Done: created the private `latchkey-exports` Cloudflare R2 bucket in APAC, with a seven-day lifecycle for the `exports/` prefix. Added a reversible export-job migration, validated R2 configuration, S3-compatible R2 storage adapter, persisted export jobs, JSON and CSV rendering, and five-minute signed download URLs after seller-scoped lookup. The worker writes only to `exports/<seller id>/<export id>`.

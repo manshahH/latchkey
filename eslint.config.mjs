@@ -2,8 +2,18 @@ import eslint from "@eslint/js";
 import importPlugin from "eslint-plugin-import";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import { fileURLToPath } from "node:url";
 
 const appPackages = ["@latchkey/api", "@latchkey/web", "@latchkey/worker"];
+const workspaceManifest = (directory) => fileURLToPath(new URL(`./${directory}/`, import.meta.url));
+
+const externalDependencyRule = (packageDir) => [
+  "error",
+  {
+    devDependencies: ["**/*.config.*"],
+    packageDir
+  }
+];
 
 export default tseslint.config(
   {
@@ -58,6 +68,26 @@ export default tseslint.config(
           ]
         }
       ]
+    }
+  },
+  {
+    files: ["apps/api/**/*.{js,mjs,cjs,ts,mts,cts}"],
+    rules: {
+      "import/no-extraneous-dependencies": externalDependencyRule(workspaceManifest("apps/api"))
+    }
+  },
+  {
+    files: ["apps/worker/**/*.{js,mjs,cjs,ts,mts,cts}"],
+    rules: {
+      "import/no-extraneous-dependencies": externalDependencyRule(workspaceManifest("apps/worker"))
+    }
+  },
+  {
+    files: ["packages/delivery/**/*.{js,mjs,cjs,ts,mts,cts}"],
+    rules: {
+      "import/no-extraneous-dependencies": externalDependencyRule(
+        workspaceManifest("packages/delivery")
+      )
     }
   },
   {
