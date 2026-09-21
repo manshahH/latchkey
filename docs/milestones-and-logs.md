@@ -16,7 +16,7 @@
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
-| M6 Seller dashboard | IN PROGRESS | 2026-09-21 | | Dashboard API and local safety checks are in progress. |
+| M6 Seller dashboard | BLOCKED | 2026-09-21 | | Local dashboard work is verified. Needs a non-production S3 bucket and authorized staging provider purchase/refund proof. |
 | M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
 | M8 Registry delivery | NOT STARTED | | | |
 | M9 Team licenses | NOT STARTED | | | |
@@ -32,7 +32,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Branch in progress:** `m6/seller-dashboard`.
 **What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, export data, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
 **Next action:** Finish M6 dashboard UI, asynchronous S3 export storage, and authorized staging purchase and refund proof.
-**Open blockers:** None for the owner-scoped Paddle and Stripe M4 work.
+**Open blockers:** M6 needs a non-production S3 bucket for signed export downloads and authorization to run the staging provider purchase and refund acceptance proof.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
