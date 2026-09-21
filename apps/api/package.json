@@ -11,9 +11,11 @@
     "@latchkey/core": "workspace:*",
     "@latchkey/db": "workspace:*",
     "@latchkey/github": "workspace:*",
+    "@latchkey/email": "workspace:*",
     "@latchkey/providers": "workspace:*",
     "hono": "^4.11.4",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@latchkey/crypto": "workspace:*",

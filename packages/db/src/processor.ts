@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import {
   defaultRevokePolicy,
@@ -7,6 +7,7 @@ import {
   LicenseEventSchema,
   type LicenseEvent
 } from "@latchkey/core";
+import { createClaim } from "./buyer.js";
 import { enqueueJob } from "./repositories.js";
 
 interface EventRow {
@@ -17,21 +18,31 @@ interface EventRow {
 }
 interface ProductRow {
   id: string;
+  name: string;
   revoke_policy: Record<string, unknown>;
+}
+
+export interface ClaimNotification {
+  licenseId: string;
+  productName: string;
+  purchaseEmail: string;
+  token: string;
 }
 
 /** Normalizes one stored event into durable license state within one database transaction. */
 export const processStoredEvent = async (
   sql: Sql,
   externalEventId: string,
-  now: Date
-): Promise<void> =>
+  now: Date,
+  claimToken = randomBytes(32).toString("base64url")
+): Promise<ClaimNotification | null> =>
   sql.begin(async (transaction) => {
+    let notification: ClaimNotification | null = null;
     const events = await transaction<
       EventRow[]
     >`SELECT id, seller_id, received_at, payload FROM external_events WHERE id = ${externalEventId}::uuid FOR UPDATE`;
     const externalEvent = events[0];
-    if (externalEvent === undefined) return;
+    if (externalEvent === undefined) return null;
     if (
       (
         await transaction<
@@ -39,7 +50,7 @@ export const processStoredEvent = async (
         >`SELECT processed_at FROM external_events WHERE id = ${externalEventId}::uuid`
       )[0]?.processed_at !== null
     )
-      return;
+      return null;
     const payload = externalEvent.payload;
     const event = LicenseEventSchema.parse(payload.event);
     const orderId = String(payload.externalOrderId);
@@ -69,18 +80,22 @@ export const processStoredEvent = async (
     if (productId.length === 0) {
       await transaction`UPDATE external_events SET process_error = 'unmapped_product' WHERE id = ${externalEvent.id}::uuid`;
       await transaction`INSERT INTO drift_items (id, seller_id, kind, details) VALUES (${randomUUID()}::uuid, ${externalEvent.seller_id}::uuid, 'unmapped_product', ${JSON.stringify({ externalProductId: payload.externalProductId, externalPriceId: payload.externalPriceId })})`;
-      return;
+      return null;
     }
     const products = await transaction<
       ProductRow[]
-    >`SELECT id, revoke_policy FROM products WHERE id = ${productId}::uuid AND seller_id = ${externalEvent.seller_id}::uuid`;
+    >`SELECT id, name, revoke_policy FROM products WHERE id = ${productId}::uuid AND seller_id = ${externalEvent.seller_id}::uuid`;
     const product = products[0];
     if (product === undefined) {
       await transaction`UPDATE external_events SET process_error = 'unmapped_product' WHERE id = ${externalEvent.id}::uuid`;
       await transaction`INSERT INTO drift_items (id, seller_id, kind, details) VALUES (${randomUUID()}::uuid, ${externalEvent.seller_id}::uuid, 'unmapped_product', ${JSON.stringify({ productId })})`;
-      return;
+      return null;
     }
+    let createdLicense = false;
+    let newLicenseBuyerUserId: string | null = null;
+    let newPurchaseEmail: string | null = null;
     if (licenseId === undefined) {
+      createdLicense = true;
       licenseId = randomUUID();
       const seats =
         typeof payload.seats === "number" && Number.isInteger(payload.seats) && payload.seats > 0
@@ -105,6 +120,8 @@ export const processStoredEvent = async (
       await transaction`INSERT INTO license_external_refs (id, license_id, provider, external_order_id) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${provider}, ${orderId})`;
       for (let index = 0; index < seats; index += 1)
         await transaction`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${index === 0 ? buyerUserId : null}::uuid, ${index === 0 && buyerUserId !== null ? event.occurredAt.toISOString() : null})`;
+      newLicenseBuyerUserId = buyerUserId;
+      newPurchaseEmail = purchaseEmail;
     }
     await transaction`INSERT INTO license_events (id, license_id, external_event_id, type, occurred_at, received_at, data) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${externalEvent.id}::uuid, ${event.type}, ${event.occurredAt.toISOString()}, ${externalEvent.received_at}, ${JSON.stringify(event.data)}) ON CONFLICT (license_id, external_event_id) DO NOTHING`;
     const rows = await transaction<
@@ -132,6 +149,20 @@ export const processStoredEvent = async (
     );
     await transaction`UPDATE licenses SET status = ${state.status}, status_reason = ${event.type} WHERE id = ${licenseId}::uuid`;
     await transaction`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${externalEvent.seller_id}::uuid, 'license', ${licenseId}::uuid, 'license_refolded', ${event.type}, 'system', ${now.toISOString()})`;
+    if (
+      createdLicense &&
+      newLicenseBuyerUserId === null &&
+      newPurchaseEmail !== null &&
+      state.status === "active"
+    ) {
+      await createClaim(transaction, licenseId, claimToken, now);
+      notification = {
+        licenseId,
+        productName: product.name,
+        purchaseEmail: newPurchaseEmail,
+        token: claimToken
+      };
+    }
     const seats = await transaction<
       { id: string; user_id: string | null; released_at: Date | null }[]
     >`SELECT id, user_id, released_at FROM seats WHERE license_id = ${licenseId}::uuid`;
@@ -158,4 +189,5 @@ export const processStoredEvent = async (
         });
     }
     await transaction`UPDATE external_events SET processed_at = ${now.toISOString()}, process_error = NULL WHERE id = ${externalEvent.id}::uuid`;
+    return notification;
   });

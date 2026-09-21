@@ -6,6 +6,7 @@
   "dependencies": {
     "@latchkey/core": "workspace:*",
     "@latchkey/db": "workspace:*",
+    "@latchkey/email": "workspace:*",
     "@latchkey/github": "workspace:*",
     "@latchkey/providers": "workspace:*",
     "graphile-worker": "^0.18.0",

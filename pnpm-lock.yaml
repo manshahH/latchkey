@@ -84,6 +84,9 @@ importers:
       '@latchkey/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@latchkey/email':
+        specifier: workspace:*
+        version: link:../../packages/email
       '@latchkey/github':
         specifier: workspace:*
         version: link:../../packages/github
@@ -96,6 +99,9 @@ importers:
       postgres:
         specifier: ^3.4.7
         version: 3.4.9
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@latchkey/crypto':
         specifier: workspace:*
@@ -114,6 +120,9 @@ importers:
       '@latchkey/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@latchkey/email':
+        specifier: workspace:*
+        version: link:../../packages/email
       '@latchkey/github':
         specifier: workspace:*
         version: link:../../packages/github

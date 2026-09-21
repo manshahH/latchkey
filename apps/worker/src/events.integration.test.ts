@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { runMigrations, runOnce } from "graphile-worker";
 import { randomUUID } from "node:crypto";
 import { ExternalTransientError } from "@latchkey/core";
+import { MemoryEmailSender } from "@latchkey/email";
 import { enqueueJob, enqueueWebhookEvent, applyMigrations, createDatabase } from "@latchkey/db";
 import { FakeGitHub } from "@latchkey/github";
 import { normalizePaddleWebhook } from "@latchkey/providers";
@@ -38,9 +39,17 @@ const payload = (
 
 const runAvailableJobs = async (
   github: FakeGitHub,
-  afterGitHubCall?: () => void
+  afterGitHubCall?: () => void,
+  email?: MemoryEmailSender
 ): Promise<void> => {
-  const tasks = createTaskList({ sql: database.sql, github, now: () => now, afterGitHubCall });
+  const tasks = createTaskList({
+    sql: database.sql,
+    github,
+    now: () => now,
+    afterGitHubCall,
+    email,
+    ...(email === undefined ? {} : { claimBaseUrl: "https://latchkey.test" })
+  });
   for (let index = 0; index < 12; index += 1) {
     const available = await database.sql<{ id: number }[]>`
       SELECT id FROM graphile_worker._private_jobs
@@ -86,6 +95,27 @@ beforeEach(async () => {
   await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${deliverable}::uuid, ${product}::uuid, 'github_team', ${JSON.stringify(target)})`;
 });
 
+test("a paid purchase without a GitHub identity creates one hashed claim and sends one claim email", async () => {
+  const purchase = payload("payment-claim-1", "PaymentSucceeded");
+  delete purchase.githubUserId;
+  await enqueueWebhookEvent(database.sql, {
+    sellerId: seller,
+    source: "test",
+    externalEventId: "payment-claim-1",
+    type: "PaymentSucceeded",
+    payload: purchase,
+    now
+  });
+  const email = new MemoryEmailSender();
+  await runAvailableJobs(new FakeGitHub(), undefined, email);
+  expect(email.messages).toHaveLength(1);
+  expect(email.messages[0]?.to).toBe("buyer@example.com");
+  expect(email.messages[0]?.text).toContain("https://latchkey.test/claim/");
+  const claims = await database.sql<{ token_hash: string }[]>`SELECT token_hash FROM claims`;
+  expect(claims).toHaveLength(1);
+  expect(email.messages[0]?.text).not.toContain(claims[0]?.token_hash ?? "");
+  expect(await database.sql`SELECT * FROM email_log`).toHaveLength(1);
+}, 120_000);
 test("five duplicate webhooks produce one external event, license, and GitHub invite through Graphile tasks", async () => {
   for (let index = 0; index < 5; index += 1)
     await enqueueWebhookEvent(database.sql, {

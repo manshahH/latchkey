@@ -2,5 +2,8 @@
   "name": "@latchkey/email",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "type": "module"
 }

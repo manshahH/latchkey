@@ -136,7 +136,8 @@ All seller-owned tables carry `seller_id`. IDs are UUIDv7. Timestamps are `times
 | `sellers` | A selling account | `id`, `slug` unique, `plan`, `status` |
 | `users` | People who log in (seller members and buyers share this) | `id`, `github_user_id` unique (bigint), `github_login` (cache only), `email` |
 | `seller_members` | Who can manage a seller | `seller_id`, `user_id`, `role` (owner, admin, viewer) |
-| `sessions` | Server-side sessions | `id` (hashed token), `user_id`, `expires_at` |
+| `sessions` | Server-side sessions | `id` (hashed token), `user_id`, `csrf_token_hash`, `expires_at` |
+| `auth_states` | One-use OAuth state | `state_hash` primary key, `return_to`, `expires_at`, `created_at` |
 | `github_installations` | GitHub App installed on an org | `installation_id` unique, `seller_id`, numeric account id, account login and type, granted permissions, installed and updated timestamps, suspended and uninstalled timestamps |
 | `provider_connections` | A connected payment provider | `seller_id`, `provider`, `webhook_secret_enc`, `api_key_enc`, `key_version`, `status`, `mode` (test, live) |
 | `products` | What is sold | `seller_id`, `name`, `status` (draft, active, archived), `update_window_days` nullable, `revoke_policy` jsonb |

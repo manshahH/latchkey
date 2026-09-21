@@ -1,8 +1,10 @@
 import { run, type Runner, type TaskList } from "graphile-worker";
+import { claimLinkEmail, type EmailSender } from "@latchkey/email";
 import type { GitHubClient } from "@latchkey/github";
 import {
   processStoredEvent,
   processStoredGitHubWebhook,
+  reserveEmail,
   reconcileStoredGrant,
   runAllReconcileSweeps,
   runInviteWatchdog,
@@ -14,6 +16,8 @@ import { z } from "zod";
 export interface WorkerDependencies {
   sql: Sql;
   github: GitHubClient;
+  claimBaseUrl?: string;
+  email?: EmailSender;
   now: () => Date;
   afterGitHubCall?: () => void;
 }
@@ -29,12 +33,36 @@ const JobPayloadSchema = z
 
 export const createTaskList = ({
   sql,
+  claimBaseUrl,
+  email,
   github,
   now,
   afterGitHubCall
 }: WorkerDependencies): TaskList => ({
   process_event: async (payload) => {
-    await processStoredEvent(sql, JobPayloadSchema.parse(payload).externalEventId ?? "", now());
+    const notification = await processStoredEvent(
+      sql,
+      JobPayloadSchema.parse(payload).externalEventId ?? "",
+      now()
+    );
+    if (notification !== null && email !== undefined && claimBaseUrl !== undefined) {
+      const current = now();
+      if (
+        await reserveEmail(sql, {
+          dedupeKey: `claim:${notification.licenseId}`,
+          template: "claim_link",
+          to: notification.purchaseEmail,
+          now: current
+        })
+      )
+        await email.send(
+          claimLinkEmail({
+            claimUrl: `${claimBaseUrl}/claim/${notification.token}`,
+            productName: notification.productName,
+            to: notification.purchaseEmail
+          })
+        );
+    }
   },
   reconcile_grant: async (payload) => {
     await reconcileStoredGrant(

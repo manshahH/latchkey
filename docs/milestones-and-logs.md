@@ -15,7 +15,7 @@
 | M2 Events and jobs | DONE | 2026-09-16 | 2026-09-17 | Verified event ingestion, Graphile Worker tasks, reconciler fake, and acceptance matrix complete. |
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
-| M5 Claim and buyer experience | NOT STARTED | | | |
+| M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
 | M6 Seller dashboard | NOT STARTED | | | |
 | M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
 | M8 Registry delivery | NOT STARTED | | | |
@@ -28,10 +28,10 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 ## 2. Current state (update at the end of every session)
 
-**Last updated:** 2026-09-19
-**Branch in progress:** `m4/paddle-stripe`.
-**What exists:** M0 through M4 are complete. M4 provides Paddle and Stripe raw-body signature verification, normalized event adapters, paginated backfill, encrypted secret rotation, product-price mapping, test and live Stripe isolation, captured sandbox fixtures, and FakeGitHub integration coverage. A real Paddle sandbox purchase and approved full refund were captured and verified.
-**Next action:** Start M5 only when requested.
+**Last updated:** 2026-09-21
+**Branch in progress:** `m5/claim-buyer-experience`.
+**What exists:** M0 through M5 are complete. A paid purchase without a GitHub identity creates one random, hashed claim token and sends its link to the purchase email. Buyer GitHub OAuth sessions, CSRF validation, claim, access, mistaken-account release, purchases, rate-limited resend, buyer isolation, email templates, and dedupe persistence are covered by real-Postgres and browser tests.
+**Next action:** Start M6 seller dashboard when requested.
 **Open blockers:** None for the owner-scoped Paddle and Stripe M4 work.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
@@ -266,6 +266,24 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-21: M5 claim and buyer experience complete
+- Branch / commits: `m5/claim-buyer-experience`; completion commit follows this verified log entry.
+- Goal: take a paid buyer safely from their purchase email claim link through GitHub sign-in and invitation acceptance, while keeping their information and access isolated.
+- Done: added SHA-256 hashed, 30-day claim tokens, server-side GitHub OAuth sessions with CSRF checks and logout, claim, access, purchases, resend, and inactive wrong-account release routes. A new reversible migration records CSRF hashes, OAuth states, claim timestamps, and supporting indexes. Paid purchases with no GitHub identity create one claim and send one deduplicated claim email to the checkout address. The buyer page shows waiting, invite sent, active, queued, and needs-help states. Email templates cover claim, invite, reminder, and access removal messages.
+- Proof: `pnpm test` passed 20 files and 61 tests. `pnpm test:core:coverage` passed 5 files and 32 tests at 96.71% lines. Focused buyer API integration passed 5 tests. The worker purchase-to-claim email test passed. The clean migration up, down, up proof passed. Playwright passed the mocked OAuth and FakeGitHub purchase, claim, invite, accept, active journey. `pnpm build` and `pnpm format:check` passed. Screenshots are `test-results/m5-claim-mobile.png` and `test-results/m5-claim-desktop.png`.
+- Negative tests added and how each was proven non-vacuous: the CSRF gate was temporarily removed, and its integration test changed from the required 401 to 200 before restoration. The single-seat test proves the second account receives 409 while the original seat is unchanged. The buyer-isolation test proves buyer A receives 404 while buyer B still succeeds. The resend test proves the only recipient is the purchase email. The duplicate reminder reservation test proves one row and one message.
+- Edge cases considered: expired and forwarded claim links, two GitHub accounts trying one seat, renamed accounts through numeric identity, inactive mistaken account release within 24 hours, invite waiting and queue states, resend abuse, duplicate notifications, and guessed access ids. Expired links, conflict, isolation, resend recipient, dedupe, wrong account, and purchase-to-active are covered by execution.
+- Problems hit and how solved: the M5 down migration dropped two indexes absent from its forward migration. Added the indexes and extended the migration test to prove M5 rollback before earlier migrations. The repository patch helper was unavailable on this Windows sandbox, so the two exact test and SQL corrections used a no-BOM local write fallback, then Prettier and the migration proof verified them.
+- Docs updated: status board, current state, architecture table descriptions, and this completion log.
+- Next step: start M6 when requested.
+### 2026-09-21: M5 claim and buyer experience started
+- Branch / commits: `m5/claim-buyer-experience`; no commit yet.
+- Goal: let a buyer safely claim a paid license with their GitHub identity, see live access state, manage an unactivated mistaken identity, revisit purchases, and receive only deduplicated, purchase-email messages.
+- Plan: add hashed claim and session state plus reversible migration; add GitHub OAuth, CSRF-protected buyer endpoints, claim/access/purchases pages, and injectable email delivery; prove the single-seat, expiry, ownership, CSRF, resend-rate, and email-deduplication gates first; then run a Playwright purchase-to-active flow against FakeGitHub at phone and desktop widths.
+- Uncertainties: the existing GitHub App user-login client id and secret are not in local configuration. The implementation will make them explicit required production configuration and use a mocked OAuth adapter in local tests. This does not change App permissions or subscriptions.
+- Edge cases considered: expired and forwarded claim links, two GitHub accounts trying one seat, buyer account rename, invite queue and pending invite states, a buyer releasing an inactive wrong account within 24 hours, resend abuse, duplicated reminder jobs, and another buyer guessing an access id.
+- Next step: add M5 persistence and negative tests before endpoints.
 
 ### 2026-09-19: M4 Paddle and Stripe implementation complete
 - Branch / commit: `main`, `f21d775` (`feat: add Paddle and Stripe payment adapters`).

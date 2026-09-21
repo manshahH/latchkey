@@ -40,6 +40,16 @@ const providerSecretRotationColumnsExist = async (): Promise<boolean> => {
   `;
   return rows[0]?.count === 2;
 };
+const authStatesTableExists = async (): Promise<boolean> => {
+  const rows = await database.sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'auth_states'
+    ) AS exists
+  `;
+  return rows[0]?.exists ?? false;
+};
+
 const githubWebhookDeliveriesTableExists = async (): Promise<boolean> => {
   const rows = await database.sql<{ exists: boolean }[]>`
     SELECT EXISTS (
@@ -60,12 +70,17 @@ afterAll(async () => {
 });
 
 test("migrations run up, down, then up on a clean Postgres database", async () => {
-  expect(await applyMigrations(database.sql)).toBe(4);
+  expect(await applyMigrations(database.sql)).toBe(5);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await providerSecretRotationColumnsExist()).toBe(true);
+  expect(await authStatesTableExists()).toBe(true);
 
+  expect(await rollbackMigration(database.sql)).toBe(true);
+  expect(await authStatesTableExists()).toBe(false);
+  expect(await providerSecretRotationColumnsExist()).toBe(true);
+  expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await rollbackMigration(database.sql)).toBe(true);
   expect(await providerSecretRotationColumnsExist()).toBe(false);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
@@ -76,10 +91,11 @@ test("migrations run up, down, then up on a clean Postgres database", async () =
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(false);
 
-  expect(await applyMigrations(database.sql)).toBe(3);
+  expect(await applyMigrations(database.sql)).toBe(4);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await providerSecretRotationColumnsExist()).toBe(true);
+  expect(await authStatesTableExists()).toBe(true);
   expect(await applyMigrations(database.sql)).toBe(0);
 }, 120_000);

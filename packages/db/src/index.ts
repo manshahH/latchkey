@@ -28,3 +28,20 @@ export {
   storeVerifiedGitHubWebhook
 } from "./github.js";
 export type { GitHubInstallationLink, GitHubWebhookInput } from "./github.js";
+export {
+  claimSeat,
+  consumeOAuthState,
+  createBuyerSession,
+  createClaim,
+  createOAuthState,
+  deleteBuyerSession,
+  getBuyerAccess,
+  getBuyerSession,
+  getClaimDetails,
+  listBuyerPurchases,
+  releaseInactiveSeat,
+  replaceClaimForResend,
+  requireBuyerSession,
+  reserveEmail
+} from "./buyer.js";
+export type { BuyerAccess, BuyerIdentity, BuyerSession, ClaimDetails } from "./buyer.js";

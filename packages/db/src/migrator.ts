@@ -28,6 +28,11 @@ const migrations: readonly Migration[] = [
     downFile: new URL("../migrations/0003_provider_secret_rotation.down.sql", import.meta.url),
     id: "0003_provider_secret_rotation",
     upFile: new URL("../migrations/0003_provider_secret_rotation.sql", import.meta.url)
+  },
+  {
+    downFile: new URL("../migrations/0004_buyer_claims.down.sql", import.meta.url),
+    id: "0004_buyer_claims",
+    upFile: new URL("../migrations/0004_buyer_claims.sql", import.meta.url)
   }
 ];
 
