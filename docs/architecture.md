@@ -38,7 +38,7 @@ flowchart LR
     API[api\nHono on Node\nwebhooks, registry, public API]
     WRK[worker\nGraphile Worker\njobs, reconciler, cron]
     DB[(Postgres\nstate + job queue)]
-    S3[(S3\nartifacts, exports)]
+    S3[(S3 artifacts)]\n    R2[(Cloudflare R2\nexports)]
     KMS[KMS + Secrets Manager]
   end
 
@@ -50,8 +50,8 @@ flowchart LR
   WRK -- REST API --> GH
   WRK -- REST API backfill --> PP
   WRK --> EM
-  WRK --> S3
-  API --> S3
+  WRK --> S3\n    WRK --> R2
+  API --> S3\n    API --> R2
   API --> KMS
   WRK --> KMS
   Buyer((Buyer)) --> WEB
@@ -77,7 +77,7 @@ flowchart LR
 | Validation | Zod | Parse every external payload and request body |
 | Auth | GitHub App user authorization, server-side sessions in Postgres | Sellers and buyers are developers |
 | Email | Resend behind an `EmailSender` interface | Fast to ship; swappable for SES |
-| Storage | S3 (versioned, private) | Registry artifacts, exports |
+| Storage | AWS S3 for registry artifacts; Cloudflare R2 (private, S3-compatible) for seller exports | Export objects use the `exports/` prefix and a 7-day lifecycle |
 | Secrets | AWS Secrets Manager + KMS envelope encryption | Encrypt provider keys and webhook secrets per seller |
 | Hosting | AWS ECS Fargate (web, api, worker) behind ALB, RDS Postgres | Owner is AWS-experienced |
 | IaC | AWS CDK (TypeScript) | Same language |
