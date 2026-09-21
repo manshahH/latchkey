@@ -6,6 +6,7 @@ import { enqueueJob } from "./repositories.js";
 type Queryable = Sql | TransactionSql;
 export type SellerRole = "owner" | "admin" | "viewer";
 const roles: readonly SellerRole[] = ["owner", "admin", "viewer"];
+const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 const roleRank: Record<SellerRole, number> = { viewer: 0, admin: 1, owner: 2 };
 const assertRole = (role: string): SellerRole => {
   if (!roles.includes(role as SellerRole)) throw new ValidationError("Member role is invalid.");
@@ -180,23 +181,6 @@ export const exportSellerData = async (sql: Queryable, sellerId: string) => ({
   activity:
     await sql`SELECT id, action, reason, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid`
 });
-export const requestSellerExport = async (
-  sql: Sql,
-  sellerId: string,
-  actor: string,
-  now: Date
-): Promise<void> => {
-  await sql.begin(async (tx) => {
-    await enqueueJob(tx, {
-      taskIdentifier: "generate_export",
-      payload: { sellerId, actor },
-      jobKey: `export:${sellerId}:${now.toISOString()}`,
-      runAt: now
-    });
-    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'export_requested', ${JSON.stringify({ sellerId })}, ${now.toISOString()})`;
-  });
-};
-
 export const getSellerOnboarding = async (sql: Queryable, sellerId: string) => {
   const [installation, connection, product, mapping, purchase, refund] = await Promise.all([
     sql<
@@ -255,4 +239,74 @@ export const setSellerMemberRole = async (
     if (!changed) throw new NotFoundError("Member was not found.");
     await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'member_role_changed', ${JSON.stringify({ sellerId, targetUserId, role })}, ${now.toISOString()})`;
   });
+};
+
+export interface PendingSellerExport {
+  format: "csv" | "json";
+  id: string;
+  sellerId: string;
+}
+export const requestSellerExport = async (
+  sql: Sql,
+  sellerId: string,
+  actor: string,
+  now: Date,
+  format: "csv" | "json" = "json"
+): Promise<string> =>
+  sql.begin(async (tx) => {
+    const id = randomUUID();
+    await tx`INSERT INTO exports (id, seller_id, requested_by, format, status, created_at) VALUES (${id}::uuid, ${sellerId}::uuid, ${actor}::uuid, ${format}, 'queued', ${now.toISOString()})`;
+    await enqueueJob(tx, {
+      taskIdentifier: "generate_export",
+      payload: { exportId: id },
+      jobKey: `export:${id}`,
+      runAt: now
+    });
+    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'export_requested', ${JSON.stringify({ sellerId, exportId: id, format })}, ${now.toISOString()})`;
+    return id;
+  });
+export const getPendingSellerExport = async (
+  sql: Queryable,
+  exportId: string
+): Promise<PendingSellerExport | null> => {
+  const row = (
+    await sql<
+      { id: string; seller_id: string; format: "csv" | "json" }[]
+    >`SELECT id, seller_id, format FROM exports WHERE id = ${exportId}::uuid AND status = 'queued'`
+  )[0];
+  return row === undefined ? null : { id: row.id, sellerId: row.seller_id, format: row.format };
+};
+export const renderSellerExport = async (
+  sql: Queryable,
+  sellerId: string,
+  format: "csv" | "json"
+): Promise<{ body: string; contentType: string }> => {
+  const data = await exportSellerData(sql, sellerId);
+  if (format === "json") return { body: JSON.stringify(data), contentType: "application/json" };
+  const cells = (values: readonly (string | null | undefined)[]) =>
+    values.map((value) => `"${(value ?? "").replaceAll('"', '""')}"`).join(",");
+  return {
+    body: [
+      cells(["license_id", "product", "status", "purchase_email"]),
+      ...data.licenses.map((row) => cells([row.id, row.productName, row.status, row.purchaseEmail]))
+    ].join("\n"),
+    contentType: "text/csv"
+  };
+};
+export const markSellerExportReady = async (
+  sql: Queryable,
+  exportId: string,
+  storageKey: string,
+  expiresAt: Date
+): Promise<void> => {
+  await sql`UPDATE exports SET status = 'ready', storage_key = ${storageKey}, expires_at = ${expiresAt.toISOString()} WHERE id = ${exportId}::uuid AND status = 'queued'`;
+};
+export const getSellerExport = async (sql: Queryable, sellerId: string, exportId: string) => {
+  const row = (
+    await sql<
+      { format: "csv" | "json"; storage_key: string; expires_at: Date | string }[]
+    >`SELECT format, storage_key, expires_at FROM exports WHERE id = ${exportId}::uuid AND seller_id = ${sellerId}::uuid AND status = 'ready'`
+  )[0];
+  if (!row) throw new NotFoundError("Export was not found.");
+  return { format: row.format, storageKey: row.storage_key, expiresAt: toDate(row.expires_at) };
 };

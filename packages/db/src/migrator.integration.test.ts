@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "vitest";
+﻿import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { startPostgres, type TestPostgres } from "@latchkey/testing";
 
@@ -70,13 +70,15 @@ afterAll(async () => {
 });
 
 test("migrations run up, down, then up on a clean Postgres database", async () => {
-  expect(await applyMigrations(database.sql)).toBe(5);
+  expect(await applyMigrations(database.sql)).toBe(6);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await providerSecretRotationColumnsExist()).toBe(true);
   expect(await authStatesTableExists()).toBe(true);
 
+  expect(await rollbackMigration(database.sql)).toBe(true);
+  expect(await authStatesTableExists()).toBe(true);
   expect(await rollbackMigration(database.sql)).toBe(true);
   expect(await authStatesTableExists()).toBe(false);
   expect(await providerSecretRotationColumnsExist()).toBe(true);
@@ -91,7 +93,7 @@ test("migrations run up, down, then up on a clean Postgres database", async () =
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(false);
 
-  expect(await applyMigrations(database.sql)).toBe(4);
+  expect(await applyMigrations(database.sql)).toBe(5);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
@@ -99,3 +101,4 @@ test("migrations run up, down, then up on a clean Postgres database", async () =
   expect(await authStatesTableExists()).toBe(true);
   expect(await applyMigrations(database.sql)).toBe(0);
 }, 120_000);
+

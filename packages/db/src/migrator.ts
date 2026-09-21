@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+﻿import { readFile } from "node:fs/promises";
 
 import type { Sql } from "postgres";
 
@@ -33,6 +33,11 @@ const migrations: readonly Migration[] = [
     downFile: new URL("../migrations/0004_buyer_claims.down.sql", import.meta.url),
     id: "0004_buyer_claims",
     upFile: new URL("../migrations/0004_buyer_claims.sql", import.meta.url)
+  },
+  {
+    downFile: new URL("../migrations/0005_exports.down.sql", import.meta.url),
+    id: "0005_exports",
+    upFile: new URL("../migrations/0005_exports.sql", import.meta.url)
   }
 ];
 

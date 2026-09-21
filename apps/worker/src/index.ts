@@ -1,7 +1,11 @@
-import { run, type Runner, type TaskList } from "graphile-worker";
+﻿import { run, type Runner, type TaskList } from "graphile-worker";
 import { claimLinkEmail, type EmailSender } from "@latchkey/email";
+import type { ExportStorage } from "@latchkey/delivery";
 import type { GitHubClient } from "@latchkey/github";
 import {
+  getPendingSellerExport,
+  markSellerExportReady,
+  renderSellerExport,
   processStoredEvent,
   processStoredGitHubWebhook,
   reserveEmail,
@@ -18,6 +22,7 @@ export interface WorkerDependencies {
   github: GitHubClient;
   claimBaseUrl?: string;
   email?: EmailSender;
+  exportStorage?: ExportStorage;
   now: () => Date;
   afterGitHubCall?: () => void;
 }
@@ -27,7 +32,8 @@ const JobPayloadSchema = z
     deliveryId: z.string().uuid().optional(),
     externalEventId: z.string().uuid().optional(),
     grantId: z.string().uuid().optional(),
-    installationId: z.string().regex(/^\d+$/).optional()
+    installationId: z.string().regex(/^\d+$/).optional(),
+    exportId: z.string().uuid().optional()
   })
   .strict();
 
@@ -35,6 +41,7 @@ export const createTaskList = ({
   sql,
   claimBaseUrl,
   email,
+  exportStorage,
   github,
   now,
   afterGitHubCall
@@ -86,6 +93,20 @@ export const createTaskList = ({
       return;
     }
     await runReconcileSweep(sql, github, BigInt(installationId), now());
+  },
+  generate_export: async (payload) => {
+    const exportId = JobPayloadSchema.parse(payload).exportId ?? "";
+    const pending = await getPendingSellerExport(sql, exportId);
+    if (pending === null || exportStorage === undefined) return;
+    const rendered = await renderSellerExport(sql, pending.sellerId, pending.format);
+    const key = `exports/${pending.sellerId}/${pending.id}.${pending.format}`;
+    await exportStorage.put({ body: rendered.body, contentType: rendered.contentType, key });
+    await markSellerExportReady(
+      sql,
+      pending.id,
+      key,
+      new Date(now().getTime() + 7 * 24 * 60 * 60 * 1000)
+    );
   },
   notify_buyer: () => Promise.resolve(undefined),
   notify_seller: () => Promise.resolve(undefined)

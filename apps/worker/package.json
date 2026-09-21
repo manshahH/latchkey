@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "@latchkey/worker",
   "version": "0.0.0",
   "private": true,
@@ -6,6 +6,7 @@
   "dependencies": {
     "@latchkey/core": "workspace:*",
     "@latchkey/db": "workspace:*",
+    "@latchkey/delivery": "workspace:*",
     "@latchkey/email": "workspace:*",
     "@latchkey/github": "workspace:*",
     "@latchkey/providers": "workspace:*",

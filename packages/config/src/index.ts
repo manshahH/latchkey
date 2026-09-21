@@ -69,3 +69,20 @@ export const loadGitHubClientConfig = (environment: NodeJS.ProcessEnv): GitHubCl
   const variableName = typeof pathSegment === "string" ? pathSegment : "environment";
   throw new ConfigurationError(`Configuration error: ${variableName} is required.`);
 };
+
+const r2EnvironmentSchema = z.object({
+  LATCHKEY_R2_ACCESS_KEY_ID: z.string().min(1),
+  LATCHKEY_R2_ACCOUNT_ID: z.string().regex(/^[a-f0-9]{32}$/),
+  LATCHKEY_R2_BUCKET: z.literal("latchkey-exports"),
+  LATCHKEY_R2_SECRET_ACCESS_KEY: z.string().min(1)
+});
+export type R2Config = Readonly<z.infer<typeof r2EnvironmentSchema>>;
+export const loadR2Config = (environment: NodeJS.ProcessEnv): R2Config => {
+  const parsed = r2EnvironmentSchema.safeParse(environment);
+  if (parsed.success) return parsed.data;
+  const variableName =
+    typeof parsed.error.issues[0]?.path[0] === "string"
+      ? parsed.error.issues[0].path[0]
+      : "environment";
+  throw new ConfigurationError(`Configuration error: ${variableName} is required or invalid.`);
+};

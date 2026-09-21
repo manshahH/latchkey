@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "@latchkey/api",
   "version": "0.0.0",
   "private": true,
@@ -10,6 +10,7 @@
     "@latchkey/config": "workspace:*",
     "@latchkey/core": "workspace:*",
     "@latchkey/db": "workspace:*",
+    "@latchkey/delivery": "workspace:*",
     "@latchkey/github": "workspace:*",
     "@latchkey/email": "workspace:*",
     "@latchkey/providers": "workspace:*",

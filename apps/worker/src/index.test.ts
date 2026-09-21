@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+﻿import { expect, test } from "vitest";
 import { FakeGitHub } from "@latchkey/github";
 import { createTaskList } from "./index.js";
 
@@ -9,6 +9,7 @@ test("worker exposes the Graphile M2 and M3 task identifiers", () => {
     now: () => new Date("2026-01-01T00:00:00Z")
   });
   expect(Object.keys(tasks).sort()).toEqual([
+    "generate_export",
     "invite_watchdog",
     "notify_buyer",
     "notify_seller",

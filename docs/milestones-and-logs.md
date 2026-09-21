@@ -32,7 +32,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Branch in progress:** `m6/seller-dashboard`.
 **What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, export data, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
 **Next action:** Finish M6 dashboard UI, asynchronous S3 export storage, and authorized staging purchase and refund proof.
-**Open blockers:** M6 has a private Cloudflare R2 export bucket. It needs a bucket-scoped R2 Object Read and Write API token in secure deployment configuration, plus authorization to run the staging provider purchase and refund acceptance proof.
+**Open blockers:** M6 export storage is wired to the private Cloudflare R2 bucket and local credentials are present. The remaining blocker is authorization to run the staging provider purchase and refund acceptance proof.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -275,6 +275,12 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-22: M6 private R2 export wiring
+- Branch / commits: `m6/seller-dashboard`; export implementation commit pending.
+- Done: created the private `latchkey-exports` Cloudflare R2 bucket in APAC, with a seven-day lifecycle for the `exports/` prefix. Added a reversible export-job migration, validated R2 configuration, S3-compatible R2 storage adapter, persisted export jobs, JSON and CSV rendering, and five-minute signed download URLs after seller-scoped lookup. The worker writes only to `exports/<seller id>/<export id>`.
+- Proof: R2 bucket creation and lifecycle listing succeeded. Focused worker unit tests passed 2 tests. Seller and migration integration passed 6 tests, including clean migration up, down, up. Typecheck and lint passed after the final API format change; build and formatting were invoked but this runner returned before their completion output.
+- Security: the R2 access key and secret were checked only for presence in `.env.local`, never printed, logged, or committed. The runtime token is bucket-scoped and the bucket has no public domain.
+- Next step: run the authorized staging provider purchase and refund acceptance proof, then complete the remaining M6 handoff checks.
 ### 2026-09-22: M6 dashboard local implementation extended
 - Branch / commits: `m6/seller-dashboard`; `f67491e` (`feat(seller): add onboarding dashboard`).
 - Done: added onboarding state that remains incomplete until a test payment and observed access removal exist, installation and provider failure banners, owner-only member role changes, and a responsive seller dashboard. The dashboard is rendered through a session-bound route and escapes seller data before display.

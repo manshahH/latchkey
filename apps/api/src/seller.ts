@@ -1,12 +1,14 @@
 ﻿import { Hono, type Context } from "hono";
+import type { ExportStorage } from "@latchkey/delivery";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
-import { LatchkeyError } from "@latchkey/core";
+import { LatchkeyError, NotFoundError, ValidationError } from "@latchkey/core";
 import {
   archiveSellerProduct,
   createSeller,
   createSellerProduct,
   exportSellerData,
+  getSellerExport,
   getSellerOnboarding,
   listSellerBanners,
   listSellerDrift,
@@ -34,9 +36,10 @@ const text = (value: unknown, name: string) =>
 export interface SellerApiOptions {
   sql: Sql;
   now: () => Date;
+  exportStorage?: ExportStorage;
 }
 /** Seller mutations share the existing signed-in session and require a CSRF header. */
-export const createSellerApi = ({ sql, now }: SellerApiOptions) => {
+export const createSellerApi = ({ sql, now, exportStorage }: SellerApiOptions) => {
   const app = new Hono();
   app.onError((error, c) =>
     error instanceof LatchkeyError
@@ -186,8 +189,19 @@ export const createSellerApi = ({ sql, now }: SellerApiOptions) => {
     const user = await session(c, true);
     const sellerId = id.parse(c.req.param("sellerId"));
     await requireSellerRole(sql, sellerId, user, "viewer");
-    await requestSellerExport(sql, sellerId, user, now());
-    return c.json({ queued: true }, 202);
+    const input = await body(c.req.raw);
+    const format = z.enum(["json", "csv"]).parse(input.format ?? "json");
+    const exportId = await requestSellerExport(sql, sellerId, user, now(), format);
+    return c.json({ exportId, queued: true }, 202);
+  });
+  app.get("/sellers/:sellerId/exports/:exportId/download", async (c) => {
+    const user = await session(c);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "viewer");
+    if (exportStorage === undefined) throw new ValidationError("Exports are not configured yet.");
+    const item = await getSellerExport(sql, sellerId, id.parse(c.req.param("exportId")));
+    if (item.expiresAt <= now()) throw new NotFoundError("Export was not found.");
+    return c.json({ url: await exportStorage.signedDownloadUrl(item.storageKey, 300) });
   });
   return app;
 };
