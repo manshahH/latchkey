@@ -32,7 +32,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Branch in progress:** `m6/seller-dashboard`.
 **What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, export data, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
 **Next action:** Finish M6 dashboard UI, asynchronous S3 export storage, and authorized staging purchase and refund proof.
-**Open blockers:** M6 needs a non-production S3 bucket for signed export downloads and authorization to run the staging provider purchase and refund acceptance proof.
+**Open blockers:** M6 has a private Cloudflare R2 export bucket. It needs a bucket-scoped R2 Object Read and Write API token in secure deployment configuration, plus authorization to run the staging provider purchase and refund acceptance proof.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -217,6 +217,14 @@ Format:
 
 ---
 
+### D-029: Use a dedicated Cloudflare R2 bucket for seller exports
+- Date: 2026-09-22
+- Status: Accepted
+- Decided by: owner and agent
+- Context: M6 requires private S3-compatible export storage with short-lived downloads. The owner has an authenticated Cloudflare account and asked the agent to choose the best option.
+- Decision: use the private `latchkey-exports` R2 bucket in APAC. Generated objects use the `exports/` prefix and expire after seven days. Production access will use a bucket-scoped Object Read and Write token held only in deployment secrets.
+- Alternatives: reuse an existing Maktoob bucket (would mix unrelated data); create an AWS S3 bucket (would add another account and service when R2 is already available).
+- Consequences: the R2 endpoint is S3-compatible. M6 needs an R2 access key and secret in deployment configuration before the exporter can be connected to the live bucket.
 ### D-028: M4 first pass is Paddle and Stripe only
 - Date: 2026-09-19
 - Status: Accepted
