@@ -268,7 +268,7 @@ Format (newest first):
 ```
 
 ### 2026-09-21: M6 seller dashboard in progress
-- Branch / commits: `m6/seller-dashboard`; no commit yet.
+- Branch / commits: `m6/seller-dashboard`; `173b66f` (`feat(seller): add dashboard safety API`).
 - Goal: let sellers manage products, access, and support work safely without exposing another seller's data.
 - Done: added server-side seller roles, scoped products and license lists, timelines, manual revoke and restore through desired state plus the reconciler, drift resolution, data export, audit records, and archive behavior that keeps existing access intact.
 - Proof: focused real-Postgres M6 integration test passed 3 tests. Role mutation proof deliberately inverted the permission comparison: the viewer revoke test changed from 403 to 200, then passed again after restoration. `pnpm typecheck` passed. The combined check command was started, but this Windows runner returned only its lint invocation without a terminal exit status.
