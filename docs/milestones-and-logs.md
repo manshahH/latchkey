@@ -276,7 +276,7 @@ Format (newest first):
 ```
 
 ### 2026-09-22: M6 private R2 export wiring
-- Branch / commits: `m6/seller-dashboard`; export implementation commit pending.
+- Branch / commits: `m6/seller-dashboard`; `12fee79` (`feat(exports): store seller exports in R2`).
 - Done: created the private `latchkey-exports` Cloudflare R2 bucket in APAC, with a seven-day lifecycle for the `exports/` prefix. Added a reversible export-job migration, validated R2 configuration, S3-compatible R2 storage adapter, persisted export jobs, JSON and CSV rendering, and five-minute signed download URLs after seller-scoped lookup. The worker writes only to `exports/<seller id>/<export id>`.
 - Proof: R2 bucket creation and lifecycle listing succeeded. Focused worker unit tests passed 2 tests. Seller and migration integration passed 6 tests, including clean migration up, down, up. Typecheck and lint passed after the final API format change; build and formatting were invoked but this runner returned before their completion output.
 - Security: the R2 access key and secret were checked only for presence in `.env.local`, never printed, logged, or committed. The runtime token is bucket-scoped and the bucket has no public domain.
