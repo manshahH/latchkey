@@ -268,7 +268,7 @@ Format (newest first):
 ```
 
 ### 2026-09-22: M6 dashboard local implementation extended
-- Branch / commits: `m6/seller-dashboard`; follow-up commit pending.
+- Branch / commits: `m6/seller-dashboard`; `f67491e` (`feat(seller): add onboarding dashboard`).
 - Done: added onboarding state that remains incomplete until a test payment and observed access removal exist, installation and provider failure banners, owner-only member role changes, and a responsive seller dashboard. The dashboard is rendered through a session-bound route and escapes seller data before display.
 - Proof: focused M6 real-Postgres integration passed 5 tests. Playwright passed the dashboard at 400px and 1280px, saving `test-results/m6-dashboard-mobile.png` and `test-results/m6-dashboard-desktop.png`. Lint, typecheck, build, and formatting passed. The full integration run began after the unit and core coverage commands passed, but this Windows runner stopped returning stream output before the final summary.
 - Negative tests: viewer revoke and cross-seller list/export remain denied without rows changing; only owner can change a member role. The prior permission mutation proof applies to all role ranks.
