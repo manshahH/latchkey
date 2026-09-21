@@ -101,4 +101,3 @@ test("migrations run up, down, then up on a clean Postgres database", async () =
   expect(await authStatesTableExists()).toBe(true);
   expect(await applyMigrations(database.sql)).toBe(0);
 }, 120_000);
-

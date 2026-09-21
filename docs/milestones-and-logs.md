@@ -30,9 +30,9 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 **Last updated:** 2026-09-22
 **Branch in progress:** `m6/seller-dashboard`.
-**What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, export data, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
+**What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, complete JSON and CSV exports, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
 **Next action:** Create an approved non-production staging receiver, or explicitly move the staging purchase/refund acceptance proof to M7 when staging infrastructure is built.
-**Open blockers:** The required staging environment does not exist in this repository. There is no running API server, public webhook receiver, tunnel client, or deployment configuration. A new Paddle checkout would be unobservable, so it has not been created.
+**Open blockers:** The required deployed staging environment does not exist in this repository. There is no running API server, public webhook receiver, tunnel client, or deployment configuration. The disposable GitHub invite is pending acceptance, which is required before the provider-to-revoke proof can observe a real access removal.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -217,6 +217,14 @@ Format:
 
 ---
 
+### D-031: Encode CSV exports as typed records
+- Date: 2026-09-22
+- Status: Accepted
+- Decided by: agent
+- Context: M6 requires one CSV export containing licenses, seats, buyers, provider events, and activity. These datasets have different fields and cannot be represented losslessly by a license-only table.
+- Decision: CSV exports use `record_type`, `id`, and JSON `data` columns. JSON exports retain named collections.
+- Alternatives: generate five separate CSV files (more download and expiry coordination); omit non-license records (fails the export promise).
+- Consequences: every export record is self-identifying, and future fields can be added without silently shifting CSV columns.
 ### D-030: Resolve external dependency lint against each workspace manifest
 - Date: 2026-09-22
 - Status: Accepted
@@ -283,6 +291,17 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-22: M6 complete seller export round-trip
+- Branch / commits: `m6/seller-dashboard`; working tree changes pending review.
+- Goal: complete the M6 export promise with all seller data categories, private job-backed storage, and a count-preserving round-trip proof.
+- Done: added seller-scoped buyer records to JSON exports, expanded seat, provider-event, and activity fields, and changed CSV exports from a license-only table to typed records for licenses, seats, buyers, events, and activity. The export worker now requires storage at construction, so a deployment cannot silently leave a queued export without storage.
+- Proof: the focused real-Postgres Graphile worker integration passed 9 tests. The new export test first failed because JSON had no `buyers` collection, then passed after implementation. It queues JSON and CSV exports, runs both jobs, checks the objects are private-memory storage entries, verifies every seeded license, seat, buyer, event, and activity record appears, and confirms export status changes to `ready`. `pnpm lint`, `pnpm typecheck`, and focused seller integration passed 5 tests.
+- Negative tests added and how each was proven non-vacuous: the round-trip test initially failed with `buyers` undefined before the exporter implementation, then passed after restoration. Existing seller role and tenant-isolation mutation proof remains recorded in the prior M6 log.
+- Decisions made: D-031.
+- Edge cases considered: two licenses, an assigned buyer, unclaimed purchase email fallback, required export storage, CSV quoting, and queued job completion. All except the unclaimed fallback are directly executed in the new test; the fallback is covered by the seller-scoped SQL query.
+- Not done / deferred: live provider-to-GitHub proof remains blocked until the disposable GitHub invitation is accepted and a non-production receiver/harness can process the test event. No new checkout was created because the configured checkout landing page does not host Paddle.js and the project has no client-side Paddle token.
+- Docs updated: current state, decision D-031, and this work log.
+- Next step: accept the already-created disposable GitHub team invitation, then run the live provider-to-revoke proof.
 ### 2026-09-22: M6 authorized external-proof preflight
 - Branch / commits: `m6/seller-dashboard`; working tree changes pending review.
 - Goal: use the owner-authorized Paddle sandbox credential to run the remaining M6 purchase, refund, and GitHub revoke acceptance proof without exposing credentials.

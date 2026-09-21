@@ -1,4 +1,4 @@
-﻿import { run, type Runner, type TaskList } from "graphile-worker";
+import { run, type Runner, type TaskList } from "graphile-worker";
 import { claimLinkEmail, type EmailSender } from "@latchkey/email";
 import type { ExportStorage } from "@latchkey/delivery";
 import type { GitHubClient } from "@latchkey/github";
@@ -22,7 +22,7 @@ export interface WorkerDependencies {
   github: GitHubClient;
   claimBaseUrl?: string;
   email?: EmailSender;
-  exportStorage?: ExportStorage;
+  exportStorage: ExportStorage;
   now: () => Date;
   afterGitHubCall?: () => void;
 }
@@ -97,7 +97,7 @@ export const createTaskList = ({
   generate_export: async (payload) => {
     const exportId = JobPayloadSchema.parse(payload).exportId ?? "";
     const pending = await getPendingSellerExport(sql, exportId);
-    if (pending === null || exportStorage === undefined) return;
+    if (pending === null) return;
     const rendered = await renderSellerExport(sql, pending.sellerId, pending.format);
     const key = `exports/${pending.sellerId}/${pending.id}.${pending.format}`;
     await exportStorage.put({ body: rendered.body, contentType: rendered.contentType, key });

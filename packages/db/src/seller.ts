@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { AuthError, NotFoundError, ValidationError } from "@latchkey/core";
 import type { Sql, TransactionSql } from "postgres";
 import { enqueueJob } from "./repositories.js";
@@ -175,11 +175,13 @@ export const resolveSellerDrift = async (
 export const exportSellerData = async (sql: Queryable, sellerId: string) => ({
   licenses: await listSellerLicenses(sql, sellerId),
   seats:
-    await sql`SELECT seats.id, seats.license_id AS "licenseId", seats.user_id AS "userId" FROM seats JOIN licenses ON licenses.id = seats.license_id WHERE licenses.seller_id = ${sellerId}::uuid`,
+    await sql`SELECT seats.id, seats.license_id AS "licenseId", seats.user_id AS "userId", seats.assigned_at AS "assignedAt", seats.released_at AS "releasedAt" FROM seats JOIN licenses ON licenses.id = seats.license_id WHERE licenses.seller_id = ${sellerId}::uuid`,
+  buyers:
+    await sql`SELECT DISTINCT ON (COALESCE(users.id::text, licenses.id::text)) users.id AS "userId", users.github_user_id::text AS "githubUserId", users.github_login AS login, COALESCE(users.email, licenses.purchase_email) AS "purchaseEmail" FROM licenses LEFT JOIN seats ON seats.license_id = licenses.id LEFT JOIN users ON users.id = seats.user_id WHERE licenses.seller_id = ${sellerId}::uuid ORDER BY COALESCE(users.id::text, licenses.id::text), licenses.purchased_at DESC`,
   events:
-    await sql`SELECT external_events.id, external_events.type FROM external_events WHERE seller_id = ${sellerId}::uuid`,
+    await sql`SELECT id, source, external_event_id AS "externalEventId", type, occurred_at AS "occurredAt", received_at AS "receivedAt", payload FROM external_events WHERE seller_id = ${sellerId}::uuid`,
   activity:
-    await sql`SELECT id, action, reason, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid`
+    await sql`SELECT id, subject_type AS "subjectType", subject_id AS "subjectId", action, reason, actor, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid`
 });
 export const getSellerOnboarding = async (sql: Queryable, sellerId: string) => {
   const [installation, connection, product, mapping, purchase, refund] = await Promise.all([
@@ -285,11 +287,19 @@ export const renderSellerExport = async (
   if (format === "json") return { body: JSON.stringify(data), contentType: "application/json" };
   const cells = (values: readonly (string | null | undefined)[]) =>
     values.map((value) => `"${(value ?? "").replaceAll('"', '""')}"`).join(",");
+  const records = [
+    ...data.licenses.map((row) => ["license", row.id, JSON.stringify(row)]),
+    ...data.seats.map((row) => ["seat", String(row.id), JSON.stringify(row)]),
+    ...data.buyers.map((row) => [
+      "buyer",
+      String(row.userId ?? row.purchaseEmail ?? ""),
+      JSON.stringify(row)
+    ]),
+    ...data.events.map((row) => ["event", String(row.id), JSON.stringify(row)]),
+    ...data.activity.map((row) => ["activity", String(row.id), JSON.stringify(row)])
+  ];
   return {
-    body: [
-      cells(["license_id", "product", "status", "purchase_email"]),
-      ...data.licenses.map((row) => cells([row.id, row.productName, row.status, row.purchaseEmail]))
-    ].join("\n"),
+    body: [cells(["record_type", "id", "data"]), ...records.map(cells)].join("\n"),
     contentType: "text/csv"
   };
 };

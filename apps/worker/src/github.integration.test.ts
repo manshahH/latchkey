@@ -7,6 +7,7 @@ import {
   enqueueJob,
   storeVerifiedGitHubWebhook
 } from "@latchkey/db";
+import { MemoryExportStorage } from "@latchkey/delivery";
 import { FakeGitHub } from "@latchkey/github";
 import { FakeClock, startPostgres, type TestPostgres } from "@latchkey/testing";
 import { createTaskList } from "./index.js";
@@ -22,7 +23,12 @@ const target = { installationId, organization: "seller-org", teamSlug: "buyers" 
 const runOne = async (github: FakeGitHub, clock: FakeClock): Promise<void> => {
   await runOnce(
     { connectionString: postgres.databaseUrl, noHandleSignals: true },
-    createTaskList({ github, now: () => clock.now(), sql: database.sql })
+    createTaskList({
+      github,
+      now: () => clock.now(),
+      sql: database.sql,
+      exportStorage: new MemoryExportStorage()
+    })
   );
 };
 
