@@ -16,7 +16,7 @@
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
-| M6 Seller dashboard | NOT STARTED | | | |
+| M6 Seller dashboard | IN PROGRESS | 2026-09-21 | | Dashboard API and local safety checks are in progress. |
 | M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
 | M8 Registry delivery | NOT STARTED | | | |
 | M9 Team licenses | NOT STARTED | | | |
@@ -29,9 +29,9 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 ## 2. Current state (update at the end of every session)
 
 **Last updated:** 2026-09-21
-**Branch in progress:** `m5/claim-buyer-experience`.
+**Branch in progress:** `m6/seller-dashboard`.
 **What exists:** M0 through M5 are complete. A paid purchase without a GitHub identity creates one random, hashed claim token and sends its link to the purchase email. Buyer GitHub OAuth sessions, CSRF validation, claim, access, mistaken-account release, purchases, rate-limited resend, buyer isolation, email templates, and dedupe persistence are covered by real-Postgres and browser tests.
-**Next action:** Start M6 seller dashboard when requested.
+**Next action:** Finish M6 dashboard UI, asynchronous S3 export storage, and authorized staging purchase and refund proof.
 **Open blockers:** None for the owner-scoped Paddle and Stripe M4 work.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
@@ -267,6 +267,16 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-21: M6 seller dashboard in progress
+- Branch / commits: `m6/seller-dashboard`; no commit yet.
+- Goal: let sellers manage products, access, and support work safely without exposing another seller's data.
+- Done: added server-side seller roles, scoped products and license lists, timelines, manual revoke and restore through desired state plus the reconciler, drift resolution, data export, audit records, and archive behavior that keeps existing access intact.
+- Proof: focused real-Postgres M6 integration test passed 3 tests. Role mutation proof deliberately inverted the permission comparison: the viewer revoke test changed from 403 to 200, then passed again after restoration. `pnpm typecheck` passed. The combined check command was started, but this Windows runner returned only its lint invocation without a terminal exit status.
+- Negative tests added and how each was proven non-vacuous: viewer cannot revoke while admin can and makes no activity row; seller B cannot list or export seller A while seller A succeeds. The permission-comparison mutation made both scoped checks fail.
+- Edge cases considered: viewer writes, cross-tenant guessed ids, archived products with active licenses, reason validation, missing membership, and duplicate reconciliation job keys.
+- Not done / deferred: dashboard browser UI and screenshots, provider and GitHub onboarding controls, member management, claim resend and external-ref attachment, banners, persistent S3 export storage and a short-lived signed download link, plus staging test purchase/refund proof remain before the M6 milestone can be marked done. Staging proof needs an owner-authorized configured environment.
+- Docs updated: status board, current state, and this work log.
+- Next step: continue the remaining M6 tasks.
 ### 2026-09-21: M5 claim and buyer experience complete
 - Branch / commits: `m5/claim-buyer-experience`; completion commit follows this verified log entry.
 - Goal: take a paid buyer safely from their purchase email claim link through GitHub sign-in and invitation acceptance, while keeping their information and access isolated.

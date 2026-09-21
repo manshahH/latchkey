@@ -45,3 +45,4 @@ export {
   reserveEmail
 } from "./buyer.js";
 export type { BuyerAccess, BuyerIdentity, BuyerSession, ClaimDetails } from "./buyer.js";
+export * from "./seller.js";

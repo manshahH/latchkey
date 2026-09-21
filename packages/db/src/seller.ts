@@ -1,0 +1,198 @@
+﻿import { randomUUID } from "node:crypto";
+import { AuthError, NotFoundError, ValidationError } from "@latchkey/core";
+import type { Sql, TransactionSql } from "postgres";
+import { enqueueJob } from "./repositories.js";
+
+type Queryable = Sql | TransactionSql;
+export type SellerRole = "owner" | "admin" | "viewer";
+const roles: readonly SellerRole[] = ["owner", "admin", "viewer"];
+const roleRank: Record<SellerRole, number> = { viewer: 0, admin: 1, owner: 2 };
+const assertRole = (role: string): SellerRole => {
+  if (!roles.includes(role as SellerRole)) throw new ValidationError("Member role is invalid.");
+  return role as SellerRole;
+};
+
+/** Every seller route resolves membership first, returning 404 for a different tenant. */
+export const requireSellerRole = async (
+  sql: Queryable,
+  sellerId: string,
+  userId: string,
+  minimum: SellerRole
+): Promise<SellerRole> => {
+  const row = (
+    await sql<
+      { role: string }[]
+    >`SELECT role FROM seller_members WHERE seller_id = ${sellerId}::uuid AND user_id = ${userId}::uuid`
+  )[0];
+  if (row === undefined) throw new NotFoundError("Seller account was not found.");
+  const role = assertRole(row.role);
+  if (roleRank[role] < roleRank[minimum])
+    throw new AuthError("You do not have permission to make this change.");
+  return role;
+};
+
+export const createSeller = async (
+  sql: Sql,
+  userId: string,
+  slug: string,
+  now: Date
+): Promise<string> => {
+  if (!/^[a-z0-9-]{3,64}$/.test(slug))
+    throw new ValidationError("Use 3 to 64 lowercase letters, numbers, or hyphens.");
+  const id = randomUUID();
+  await sql.begin(async (tx) => {
+    await tx`INSERT INTO sellers (id, slug, created_at) VALUES (${id}::uuid, ${slug}, ${now.toISOString()})`;
+    await tx`INSERT INTO seller_members (seller_id, user_id, role) VALUES (${id}::uuid, ${userId}::uuid, 'owner')`;
+    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${userId}, 'seller_created', ${JSON.stringify({ sellerId: id })}, ${now.toISOString()})`;
+  });
+  return id;
+};
+
+export const listSellerProducts = async (sql: Queryable, sellerId: string) => sql<
+  { id: string; name: string; status: string; revokePolicy: Record<string, unknown> }[]
+>`
+  SELECT id, name, status, revoke_policy AS "revokePolicy" FROM products WHERE seller_id = ${sellerId}::uuid ORDER BY name`;
+export const createSellerProduct = async (
+  sql: Sql,
+  sellerId: string,
+  input: { name: string; revokePolicy: Record<string, unknown> },
+  actor: string,
+  now: Date
+): Promise<string> => {
+  if (input.name.trim().length < 1 || input.name.length > 200)
+    throw new ValidationError("Product name must be between 1 and 200 characters.");
+  const id = randomUUID();
+  await sql.begin(async (tx) => {
+    await tx`INSERT INTO products (id, seller_id, name, status, revoke_policy) VALUES (${id}::uuid, ${sellerId}::uuid, ${input.name.trim()}, 'draft', ${JSON.stringify(input.revokePolicy)})`;
+    await tx`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${sellerId}::uuid, 'product', ${id}::uuid, 'created', 'Seller created product', ${actor}, ${now.toISOString()})`;
+  });
+  return id;
+};
+export const archiveSellerProduct = async (
+  sql: Sql,
+  sellerId: string,
+  productId: string,
+  actor: string,
+  now: Date
+): Promise<void> => {
+  await sql.begin(async (tx) => {
+    const row = (
+      await tx<
+        { id: string }[]
+      >`UPDATE products SET status = 'archived' WHERE id = ${productId}::uuid AND seller_id = ${sellerId}::uuid RETURNING id`
+    )[0];
+    if (row === undefined) throw new NotFoundError("Product was not found.");
+    await tx`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${sellerId}::uuid, 'product', ${productId}::uuid, 'archived', 'Seller archived product. Existing access continues.', ${actor}, ${now.toISOString()})`;
+  });
+};
+export const listSellerLicenses = async (
+  sql: Queryable,
+  sellerId: string,
+  status?: string,
+  query?: string
+) => sql<
+  {
+    id: string;
+    productName: string;
+    status: string;
+    purchaseEmail: string | null;
+    purchasedAt: Date;
+  }[]
+>`
+ SELECT licenses.id, products.name AS "productName", licenses.status, licenses.purchase_email AS "purchaseEmail", licenses.purchased_at AS "purchasedAt" FROM licenses JOIN products ON products.id = licenses.product_id WHERE licenses.seller_id = ${sellerId}::uuid AND (${status ?? null}::text IS NULL OR licenses.status = ${status ?? null}) AND (${query ?? null}::text IS NULL OR licenses.purchase_email ILIKE ${query === undefined ? null : `%${query}%`} OR products.name ILIKE ${query === undefined ? null : `%${query}%`}) ORDER BY licenses.purchased_at DESC`;
+export const sellerLicenseTimeline = async (
+  sql: Queryable,
+  sellerId: string,
+  licenseId: string
+) => {
+  const license = (
+    await sql<
+      { id: string; productName: string; status: string }[]
+    >`SELECT licenses.id, products.name AS "productName", licenses.status FROM licenses JOIN products ON products.id = licenses.product_id WHERE licenses.id = ${licenseId}::uuid AND licenses.seller_id = ${sellerId}::uuid`
+  )[0];
+  if (!license) throw new NotFoundError("License was not found.");
+  const activity = await sql<
+    { action: string; reason: string; createdAt: Date }[]
+  >`SELECT action, reason, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid AND subject_id = ${licenseId}::uuid ORDER BY created_at DESC`;
+  return { license, activity };
+};
+/** Manual access changes only set desired state and enqueue the reconciler. */
+export const setManualAccess = async (
+  sql: Sql,
+  sellerId: string,
+  licenseId: string,
+  desired: "present" | "absent",
+  reason: string,
+  actor: string,
+  now: Date
+): Promise<void> => {
+  if (reason.trim().length < 3 || reason.length > 500)
+    throw new ValidationError("Give a short reason between 3 and 500 characters.");
+  await sql.begin(async (tx) => {
+    const license = (
+      await tx<
+        { id: string }[]
+      >`SELECT id FROM licenses WHERE id = ${licenseId}::uuid AND seller_id = ${sellerId}::uuid FOR UPDATE`
+    )[0];
+    if (!license) throw new NotFoundError("License was not found.");
+    const grants = await tx<
+      { id: string }[]
+    >`UPDATE grants SET desired = ${desired} WHERE seat_id IN (SELECT id FROM seats WHERE license_id = ${licenseId}::uuid) RETURNING id`;
+    for (const grant of grants)
+      await enqueueJob(tx, {
+        taskIdentifier: "reconcile_grant",
+        payload: { grantId: grant.id },
+        jobKey: `grant:${grant.id}`,
+        runAt: now
+      });
+    await tx`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${sellerId}::uuid, 'license', ${licenseId}::uuid, ${desired === "present" ? "restored" : "revoked"}, ${reason.trim()}, ${actor}, ${now.toISOString()})`;
+    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, ${desired === "present" ? "manual_restore" : "manual_revoke"}, ${JSON.stringify({ sellerId, licenseId, reason: reason.trim() })}, ${now.toISOString()})`;
+  });
+};
+export const listSellerDrift = async (sql: Queryable, sellerId: string) =>
+  sql<
+    { id: string; kind: string; details: Record<string, unknown>; status: string }[]
+  >`SELECT id, kind, details, status FROM drift_items WHERE seller_id = ${sellerId}::uuid ORDER BY created_at DESC`;
+export const resolveSellerDrift = async (
+  sql: Sql,
+  sellerId: string,
+  driftId: string,
+  status: "resolved" | "ignored",
+  actor: string,
+  now: Date
+): Promise<void> => {
+  await sql.begin(async (tx) => {
+    const row = (
+      await tx<
+        { id: string }[]
+      >`UPDATE drift_items SET status = ${status} WHERE id = ${driftId}::uuid AND seller_id = ${sellerId}::uuid AND status = 'open' RETURNING id`
+    )[0];
+    if (!row) throw new NotFoundError("Drift item was not found.");
+    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'drift_${status}', ${JSON.stringify({ sellerId, driftId })}, ${now.toISOString()})`;
+  });
+};
+export const exportSellerData = async (sql: Queryable, sellerId: string) => ({
+  licenses: await listSellerLicenses(sql, sellerId),
+  seats:
+    await sql`SELECT seats.id, seats.license_id AS "licenseId", seats.user_id AS "userId" FROM seats JOIN licenses ON licenses.id = seats.license_id WHERE licenses.seller_id = ${sellerId}::uuid`,
+  events:
+    await sql`SELECT external_events.id, external_events.type FROM external_events WHERE seller_id = ${sellerId}::uuid`,
+  activity:
+    await sql`SELECT id, action, reason, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid`
+});
+export const requestSellerExport = async (
+  sql: Sql,
+  sellerId: string,
+  actor: string,
+  now: Date
+): Promise<void> => {
+  await sql.begin(async (tx) => {
+    await enqueueJob(tx, {
+      taskIdentifier: "generate_export",
+      payload: { sellerId, actor },
+      jobKey: `export:${sellerId}:${now.toISOString()}`,
+      runAt: now
+    });
+    await tx`INSERT INTO audit_log (id, actor, action, details, created_at) VALUES (${randomUUID()}::uuid, ${actor}, 'export_requested', ${JSON.stringify({ sellerId })}, ${now.toISOString()})`;
+  });
+};
