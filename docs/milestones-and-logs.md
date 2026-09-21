@@ -16,7 +16,7 @@
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
-| M6 Seller dashboard | BLOCKED | 2026-09-21 | | Local dashboard, private R2 exports, Paddle authentication, and the reversible GitHub live contract are verified. There is no deployed staging API or public webhook receiver for the provider-to-revoke proof. |
+| M6 Seller dashboard | BLOCKED | 2026-09-21 | | Local dashboard, private R2 exports, Paddle authentication, captured sandbox provider evidence, and the reversible GitHub live contract are verified. A deployed staging API or public webhook receiver does not exist for the connected provider-to-revoke proof. |
 | M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
 | M8 Registry delivery | NOT STARTED | | | |
 | M9 Team licenses | NOT STARTED | | | |
@@ -32,7 +32,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Branch in progress:** `m6/seller-dashboard`.
 **What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, complete JSON and CSV exports, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
 **Next action:** Create an approved non-production staging receiver, or explicitly move the staging purchase/refund acceptance proof to M7 when staging infrastructure is built.
-**Open blockers:** The required deployed staging environment does not exist in this repository. There is no running API server, public webhook receiver, tunnel client, or deployment configuration. The disposable GitHub invite is pending acceptance, which is required before the provider-to-revoke proof can observe a real access removal.
+**Open blockers:** The required deployed staging environment does not exist in this repository. There is no running API server, public webhook receiver, tunnel client, or deployment configuration. The disposable GitHub invitation was accepted and its team and organization membership were safely revoked and confirmed absent.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -291,6 +291,14 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-22: M6 live GitHub revoke verification
+- Branch / commits: `m6/seller-dashboard`; no implementation change.
+- Goal: complete the owner-authorized live GitHub portion of the M6 test purchase/refund acceptance proof.
+- Done: created a fresh invitation for the configured disposable GitHub account, the owner accepted it, then ran the App-backed removal. The first verifier read too soon after removal and reported a propagation race. A direct organization-owner read then confirmed the disposable team and organization membership were both absent, and the idempotent verifier recorded the invite, acceptance, and safe revoke contract as passed.
+- Proof: `pnpm test:github-live:verify` passed after the owner API confirmed absence. The historical M4 record remains the verified real Paddle sandbox purchase and approved refund evidence.
+- Not done / deferred: M6 cannot claim the connected provider-to-revoke staging acceptance criterion because no deployed staging API or public webhook receiver exists. The repository only has a configuration-checking API entry point and local Docker Postgres.
+- Docs updated: status board, current state, and this work log.
+- Next step: build the deployment work scoped for M7, then run a new Paddle sandbox checkout through its webhook receiver and observe the app-driven GitHub revoke.
 ### 2026-09-22: M6 complete seller export round-trip
 - Branch / commits: `m6/seller-dashboard`; working tree changes pending review.
 - Goal: complete the M6 export promise with all seller data categories, private job-backed storage, and a count-preserving round-trip proof.
