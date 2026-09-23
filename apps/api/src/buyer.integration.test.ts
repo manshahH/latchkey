@@ -101,6 +101,20 @@ test("a second GitHub account cannot claim a single seat and the first seat rema
   ).toEqual([{ github_user_id: "101" }]);
 }, 120_000);
 
+test("claiming a seat clears stale pre-identity attention before it queues access", async () => {
+  await database.sql`UPDATE grants SET observed = 'needs_attention' WHERE id = ${grantA}::uuid`;
+  const session = await sessionFor(buyerA);
+  const claimed = await request(`/buyer/claims/${claimToken}`, session, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": session.csrfToken }
+  });
+  expect(claimed.status).toBe(200);
+  expect(
+    await database.sql<{ desired: string; observed: string }[]>`
+      SELECT desired, observed FROM grants WHERE id = ${grantA}::uuid
+    `
+  ).toEqual([{ desired: "present", observed: "none" }]);
+}, 120_000);
 test("CSRF rejection changes no seat, while the scoped valid request still succeeds", async () => {
   const first = await sessionFor(buyerA);
   const rejected = await request(`/buyer/claims/${claimToken}`, first, {
@@ -174,4 +188,49 @@ test("email dedupe reserves one delivery when the same reminder job is triggered
     })
   ).toBe(false);
   expect(await database.sql`SELECT * FROM email_log`).toHaveLength(1);
+}, 120_000);
+
+test("a claim link signed in over plain http still works on the next request (D-034 local run)", async () => {
+  let state = "";
+  const api = createBuyerApi({
+    baseUrl: "http://localhost:8080",
+    now: () => now,
+    oauth: {
+      authorizationUrl: (s) => ((state = s), `/oauth/${s}`),
+      exchange: () => Promise.resolve(buyerA)
+    },
+    secureCookies: false,
+    sql: database.sql,
+    token: () => `token-${Math.random().toString(36).slice(2)}-padding-padding-padding`
+  });
+  await api.request(`/auth/github?returnTo=/claim/${claimToken}`);
+  const callback = await api.request(`/auth/github/callback?state=${state}&code=irrelevant`);
+  expect(callback.status).toBe(302);
+  const setCookie = callback.headers.getSetCookie();
+  expect(setCookie.some((c) => /Secure/i.test(c))).toBe(false);
+  const sessionCookie = setCookie.find((c) => c.startsWith("lk_session="));
+  const csrfCookie = setCookie.find((c) => c.startsWith("lk_csrf="));
+  expect(sessionCookie).toBeDefined();
+  const cookieHeader = [sessionCookie, csrfCookie].map((c) => c?.split(";")[0]).join("; ");
+  const purchases = await api.request("/purchases", { headers: { cookie: cookieHeader } });
+  expect(purchases.status).toBe(200);
+}, 120_000);
+
+test("a claim link signed in over https still gets a Secure cookie", async () => {
+  let state = "";
+  const api = createBuyerApi({
+    baseUrl: "https://latchkey.example",
+    now: () => now,
+    oauth: {
+      authorizationUrl: (s) => ((state = s), `/oauth/${s}`),
+      exchange: () => Promise.resolve(buyerB)
+    },
+    secureCookies: true,
+    sql: database.sql,
+    token: () => `token-${Math.random().toString(36).slice(2)}-padding-padding-padding`
+  });
+  await api.request(`/auth/github?returnTo=/claim/${claimToken}`);
+  const callback = await api.request(`/auth/github/callback?state=${state}&code=irrelevant`);
+  const setCookie = callback.headers.getSetCookie();
+  expect(setCookie.some((c) => c.startsWith("lk_session=") && /Secure/i.test(c))).toBe(true);
 }, 120_000);
