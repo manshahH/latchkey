@@ -45,12 +45,19 @@ const stripeMode = (payload: Record<string, unknown>): "test" | "live" | null =>
   return typeof live === "boolean" ? (live ? "live" : "test") : null;
 };
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Verification precedes persistence, and persistence plus enqueue is delegated to one database transaction. */
 export const createApi = (store: WebhookStore, now: () => Date, metrics?: WebhookMetric) => {
   const app = new Hono();
-  app.post("/webhooks/:provider/:connectionId", async (context) => {
+  // Only known providers match, so other two-segment webhook paths (platform billing) stay reachable.
+  app.post("/webhooks/:provider{(?:test|paddle|stripe)}/:connectionId", async (context) => {
     const provider = context.req.param("provider");
-    const connection = await store.findConnection(provider, context.req.param("connectionId"));
+    const connectionId = context.req.param("connectionId");
+    // A malformed id cannot name a connection. Treat it as unknown instead of querying with it.
+    const connection = uuidPattern.test(connectionId)
+      ? await store.findConnection(provider, connectionId)
+      : null;
     const body = await context.req.text();
     const headers = Object.fromEntries(context.req.raw.headers.entries());
     const previousSecret =

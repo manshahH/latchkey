@@ -1,15 +1,20 @@
 import { expect, test } from "vitest";
 import { createApi, type WebhookStore } from "./index.js";
 
-const store = (mode: "test" | "live" = "test"): WebhookStore & { stored: number } => {
-  const result: WebhookStore & { stored: number } = {
+const store = (
+  mode: "test" | "live" = "test"
+): WebhookStore & { lookups: number; stored: number } => {
+  const result: WebhookStore & { lookups: number; stored: number } = {
+    lookups: 0,
     stored: 0,
-    findConnection: () =>
+    findConnection: () => (
+      (result.lookups += 1),
       Promise.resolve({
         sellerId: "00000000-0000-0000-0000-000000000001",
         webhookSecret: "test-webhook-secret",
         mode
-      }),
+      })
+    ),
     storeVerifiedEvent: () => {
       result.stored += 1;
       return Promise.resolve(true);
@@ -21,7 +26,7 @@ const store = (mode: "test" | "live" = "test"): WebhookStore & { stored: number 
 test("rejects unverified webhooks without changing state", async () => {
   const events = store();
   const response = await createApi(events, () => new Date("2026-01-01T00:00:00Z")).request(
-    "/webhooks/test/c",
+    "/webhooks/test/00000000-0000-0000-0000-00000000000c",
     { method: "POST", body: "{}", headers: { "x-webhook-secret": "bad" } }
   );
   expect(response.status).toBe(401);
@@ -99,9 +104,38 @@ test("rejects a test-mode Stripe event sent to a live connection without storage
     .update(`${stamp}.${body}`)
     .digest("hex");
   const response = await createApi(events, () => new Date("2026-09-19T17:00:00Z")).request(
-    "/webhooks/stripe/c",
+    "/webhooks/stripe/00000000-0000-0000-0000-00000000000c",
     { method: "POST", body, headers: { "stripe-signature": `t=${stamp},v1=${signature}` } }
   );
   expect(response.status).toBe(401);
+  expect(events.stored).toBe(0);
+});
+
+test("a malformed connection id is rejected like an unknown connection, without a lookup", async () => {
+  const events = store();
+  const response = await createApi(events, () => new Date("2026-01-01T00:00:00Z")).request(
+    "/webhooks/test/not-a-uuid",
+    { method: "POST", body: "{}", headers: { "x-webhook-secret": "test-webhook-secret" } }
+  );
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({
+    error: { code: "auth_error", message: "Webhook could not be verified." }
+  });
+  expect(events.lookups).toBe(0);
+  expect(events.stored).toBe(0);
+});
+
+test("the seller webhook route does not match unknown or lookalike providers", async () => {
+  const events = store();
+  const api = createApi(events, () => new Date("2026-01-01T00:00:00Z"));
+  for (const path of [
+    "/webhooks/latchkey-billing/paddle",
+    "/webhooks/testing/00000000-0000-0000-0000-00000000000c",
+    "/webhooks/xpaddle/00000000-0000-0000-0000-00000000000c"
+  ]) {
+    const response = await api.request(path, { method: "POST", body: "{}" });
+    expect(response.status).toBe(404);
+  }
+  expect(events.lookups).toBe(0);
   expect(events.stored).toBe(0);
 });
