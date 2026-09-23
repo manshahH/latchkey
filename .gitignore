@@ -9,3 +9,6 @@ playwright-report
 test-results
 .secrets/
 .tools/
+
+infra/.dev.vars*
+!infra/.dev.vars.example

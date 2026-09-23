@@ -1,0 +1,102 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "latchkey-runtime",
+  "main": "./index.mjs",
+  "compatibility_date": "2026-09-22",
+  "observability": { "enabled": true },
+  "secrets": {
+    "required": [
+      "LATCHKEY_DATABASE_URL",
+      "LATCHKEY_ENCRYPTION_KEY",
+      "LATCHKEY_EMAIL_FROM",
+      "LATCHKEY_GITHUB_APP_ID",
+      "LATCHKEY_GITHUB_OAUTH_CLIENT_ID",
+      "LATCHKEY_GITHUB_OAUTH_CLIENT_SECRET",
+      "LATCHKEY_GITHUB_PRIVATE_KEY",
+      "LATCHKEY_GITHUB_WEBHOOK_SECRET",
+      "LATCHKEY_PUBLIC_BASE_URL",
+      "LATCHKEY_R2_ACCESS_KEY_ID",
+      "LATCHKEY_R2_ACCOUNT_ID",
+      "LATCHKEY_R2_BUCKET",
+      "LATCHKEY_R2_SECRET_ACCESS_KEY",
+      "LATCHKEY_RESEND_API_KEY",
+      "LATCHKEY_SESSION_SECRET"
+    ]
+  },
+  "triggers": { "crons": ["*/1 * * * *"] },
+  "containers": [
+    {
+      "class_name": "LatchkeyApiContainer",
+      "image": "../Dockerfile",
+      "max_instances": 1,
+      "instance_type": "basic"
+    },
+    {
+      "class_name": "LatchkeyWorkerContainer",
+      "image": "../Dockerfile",
+      "max_instances": 1,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "LATCHKEY_API", "class_name": "LatchkeyApiContainer" },
+      { "name": "LATCHKEY_WORKER", "class_name": "LatchkeyWorkerContainer" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["LatchkeyApiContainer", "LatchkeyWorkerContainer"] }
+  ],
+  "env": {
+    "staging": {
+      "name": "latchkey-runtime-staging",
+      "observability": { "enabled": true },
+      "secrets": {
+        "required": [
+          "LATCHKEY_DATABASE_URL",
+          "LATCHKEY_ENCRYPTION_KEY",
+          "LATCHKEY_EMAIL_FROM",
+          "LATCHKEY_GITHUB_APP_ID",
+          "LATCHKEY_GITHUB_OAUTH_CLIENT_ID",
+          "LATCHKEY_GITHUB_OAUTH_CLIENT_SECRET",
+          "LATCHKEY_GITHUB_PRIVATE_KEY",
+          "LATCHKEY_GITHUB_WEBHOOK_SECRET",
+          "LATCHKEY_PUBLIC_BASE_URL",
+          "LATCHKEY_R2_ACCESS_KEY_ID",
+          "LATCHKEY_R2_ACCOUNT_ID",
+          "LATCHKEY_R2_BUCKET",
+          "LATCHKEY_R2_SECRET_ACCESS_KEY",
+          "LATCHKEY_RESEND_API_KEY",
+          "LATCHKEY_SESSION_SECRET"
+        ]
+      },
+      "triggers": { "crons": ["*/1 * * * *"] },
+      "containers": [
+        {
+          "class_name": "LatchkeyApiContainer",
+          "image": "../Dockerfile",
+          "max_instances": 1,
+          "instance_type": "basic"
+        },
+        {
+          "class_name": "LatchkeyWorkerContainer",
+          "image": "../Dockerfile",
+          "max_instances": 1,
+          "instance_type": "basic"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "LATCHKEY_API", "class_name": "LatchkeyApiContainer" },
+          { "name": "LATCHKEY_WORKER", "class_name": "LatchkeyWorkerContainer" }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1-staging",
+          "new_sqlite_classes": ["LatchkeyApiContainer", "LatchkeyWorkerContainer"]
+        }
+      ]
+    }
+  }
+}

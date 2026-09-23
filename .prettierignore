@@ -7,3 +7,5 @@ node_modules
 playwright-report
 test-results
 pnpm-lock.yaml
+# Supabase CLI machine-local state, ignored by Git.
+supabase/.temp

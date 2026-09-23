@@ -16,7 +16,8 @@ const fixture = async (path: string) =>
   JSON.parse(await readFile(path, "utf8")) as { body: string; headers: Record<string, string> };
 const sign = (body: string, secret: string, separator: ":" | ".", key: "ts" | "t", nowAt = now) => {
   const stamp = String(Math.floor(nowAt.getTime() / 1000));
-  return `${key}=${stamp},${key === "ts" ? "h1" : "v1"}=${createHmac("sha256", secret).update(`${stamp}${separator}${body}`).digest("hex")}`;
+  const headerSeparator = key === "ts" ? ";" : ",";
+  return `${key}=${stamp}${headerSeparator}${key === "ts" ? "h1" : "v1"}=${createHmac("sha256", secret).update(`${stamp}${separator}${body}`).digest("hex")}`;
 };
 
 const pages = (responses: unknown[]): ProviderBackfillFetch => {

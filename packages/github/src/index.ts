@@ -231,9 +231,19 @@ export class GitHubAppClient implements GitHubClient {
     const login = await this.loginFor(resolvedInstallation, userId);
     const teams = await this.request<Array<{ slug: string }>>(resolvedInstallation, {
       method: "GET",
-      path: `/orgs/${encodeURIComponent(organization)}/memberships/${encodeURIComponent(login)}/teams?per_page=100`
+      path: `/orgs/${encodeURIComponent(organization)}/teams?per_page=100`
     });
-    return teams.map((team) => team.slug);
+    const memberships = await Promise.all(
+      teams.map(async (team) => {
+        const membership = await this.request<TeamMembership | null>(resolvedInstallation, {
+          allowNotFound: true,
+          method: "GET",
+          path: `/orgs/${encodeURIComponent(organization)}/teams/${encodeURIComponent(team.slug)}/memberships/${encodeURIComponent(login)}`
+        });
+        return membership?.state === "active" ? team.slug : null;
+      })
+    );
+    return memberships.filter((team): team is string => team !== null);
   }
 
   public async removeOrganizationMember(

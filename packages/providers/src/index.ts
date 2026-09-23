@@ -37,11 +37,11 @@ const constantTimeEquals = (left: string, right: string): boolean => {
   const b = Buffer.from(right);
   return a.length === b.length && timingSafeEqual(a, b);
 };
-const headerParts = (value: string): Record<string, string> => {
-  const parts: Record<string, string> = {};
-  for (const part of value.split(",")) {
+const headerParts = (value: string, separator = ","): Record<string, string[]> => {
+  const parts: Record<string, string[]> = {};
+  for (const part of value.split(separator)) {
     const [key, item] = part.trim().split("=", 2);
-    if (key !== undefined && item !== undefined) parts[key] = item;
+    if (key !== undefined && item !== undefined) (parts[key] ??= []).push(item);
   }
   return parts;
 };
@@ -74,13 +74,14 @@ export const verifyPaddleWebhook = (
 ): Record<string, unknown> | null => {
   const signature = request.headers["paddle-signature"];
   if (signature === undefined) return null;
-  const parts = headerParts(signature);
-  const timestamp = parts.ts;
-  const digest = parts.h1;
+  const parts = headerParts(signature, ";");
+  const timestamp = parts.ts?.[0];
+  const digests = parts.h1 ?? [];
   if (
     !isFresh(timestamp, now) ||
-    digest === undefined ||
-    !constantTimeEquals(hmac(`${timestamp ?? ""}:${request.body}`, secret), digest)
+    !digests.some((digest) =>
+      constantTimeEquals(hmac(`${timestamp ?? ""}:${request.body}`, secret), digest)
+    )
   )
     return null;
   try {
@@ -99,12 +100,13 @@ export const verifyStripeWebhook = (
   const signature = request.headers["stripe-signature"];
   if (signature === undefined) return null;
   const parts = headerParts(signature);
-  const timestamp = parts.t;
-  const digest = parts.v1;
+  const timestamp = parts.t?.[0];
+  const digests = parts.v1 ?? [];
   if (
     !isFresh(timestamp, now) ||
-    digest === undefined ||
-    !constantTimeEquals(hmac(`${timestamp ?? ""}.${request.body}`, secret), digest)
+    !digests.some((digest) =>
+      constantTimeEquals(hmac(`${timestamp ?? ""}.${request.body}`, secret), digest)
+    )
   )
     return null;
   try {

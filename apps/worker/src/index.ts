@@ -1,8 +1,14 @@
 import { run, type Runner, type TaskList } from "graphile-worker";
+import { claimLinkEmail, type EmailSender } from "@latchkey/email";
+import type { ExportStorage } from "@latchkey/delivery";
 import type { GitHubClient } from "@latchkey/github";
 import {
+  getPendingSellerExport,
+  markSellerExportReady,
+  renderSellerExport,
   processStoredEvent,
   processStoredGitHubWebhook,
+  reserveEmail,
   reconcileStoredGrant,
   runAllReconcileSweeps,
   runInviteWatchdog,
@@ -14,6 +20,9 @@ import { z } from "zod";
 export interface WorkerDependencies {
   sql: Sql;
   github: GitHubClient;
+  claimBaseUrl?: string;
+  email?: EmailSender;
+  exportStorage: ExportStorage;
   now: () => Date;
   afterGitHubCall?: () => void;
 }
@@ -23,18 +32,44 @@ const JobPayloadSchema = z
     deliveryId: z.string().uuid().optional(),
     externalEventId: z.string().uuid().optional(),
     grantId: z.string().uuid().optional(),
-    installationId: z.string().regex(/^\d+$/).optional()
+    installationId: z.string().regex(/^\d+$/).optional(),
+    exportId: z.string().uuid().optional()
   })
   .strict();
 
 export const createTaskList = ({
   sql,
+  claimBaseUrl,
+  email,
+  exportStorage,
   github,
   now,
   afterGitHubCall
 }: WorkerDependencies): TaskList => ({
   process_event: async (payload) => {
-    await processStoredEvent(sql, JobPayloadSchema.parse(payload).externalEventId ?? "", now());
+    const notification = await processStoredEvent(
+      sql,
+      JobPayloadSchema.parse(payload).externalEventId ?? "",
+      now()
+    );
+    if (notification !== null && email !== undefined && claimBaseUrl !== undefined) {
+      const current = now();
+      if (
+        await reserveEmail(sql, {
+          dedupeKey: `claim:${notification.licenseId}`,
+          template: "claim_link",
+          to: notification.purchaseEmail,
+          now: current
+        })
+      )
+        await email.send(
+          claimLinkEmail({
+            claimUrl: `${claimBaseUrl}/claim/${notification.token}`,
+            productName: notification.productName,
+            to: notification.purchaseEmail
+          })
+        );
+    }
   },
   reconcile_grant: async (payload) => {
     await reconcileStoredGrant(
@@ -58,6 +93,20 @@ export const createTaskList = ({
       return;
     }
     await runReconcileSweep(sql, github, BigInt(installationId), now());
+  },
+  generate_export: async (payload) => {
+    const exportId = JobPayloadSchema.parse(payload).exportId ?? "";
+    const pending = await getPendingSellerExport(sql, exportId);
+    if (pending === null) return;
+    const rendered = await renderSellerExport(sql, pending.sellerId, pending.format);
+    const key = `exports/${pending.sellerId}/${pending.id}.${pending.format}`;
+    await exportStorage.put({ body: rendered.body, contentType: rendered.contentType, key });
+    await markSellerExportReady(
+      sql,
+      pending.id,
+      key,
+      new Date(now().getTime() + 7 * 24 * 60 * 60 * 1000)
+    );
   },
   notify_buyer: () => Promise.resolve(undefined),
   notify_seller: () => Promise.resolve(undefined)

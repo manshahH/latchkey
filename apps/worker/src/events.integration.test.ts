@@ -3,7 +3,15 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { runMigrations, runOnce } from "graphile-worker";
 import { randomUUID } from "node:crypto";
 import { ExternalTransientError } from "@latchkey/core";
-import { enqueueJob, enqueueWebhookEvent, applyMigrations, createDatabase } from "@latchkey/db";
+import { MemoryExportStorage } from "@latchkey/delivery";
+import { MemoryEmailSender } from "@latchkey/email";
+import {
+  enqueueJob,
+  enqueueWebhookEvent,
+  applyMigrations,
+  createDatabase,
+  requestSellerExport
+} from "@latchkey/db";
 import { FakeGitHub } from "@latchkey/github";
 import { normalizePaddleWebhook } from "@latchkey/providers";
 import { startPostgres, type TestPostgres } from "@latchkey/testing";
@@ -38,9 +46,19 @@ const payload = (
 
 const runAvailableJobs = async (
   github: FakeGitHub,
-  afterGitHubCall?: () => void
+  afterGitHubCall?: () => void,
+  email?: MemoryEmailSender,
+  exportStorage = new MemoryExportStorage()
 ): Promise<void> => {
-  const tasks = createTaskList({ sql: database.sql, github, now: () => now, afterGitHubCall });
+  const tasks = createTaskList({
+    sql: database.sql,
+    github,
+    now: () => now,
+    afterGitHubCall,
+    email,
+    exportStorage,
+    ...(email === undefined ? {} : { claimBaseUrl: "https://latchkey.test" })
+  });
   for (let index = 0; index < 12; index += 1) {
     const available = await database.sql<{ id: number }[]>`
       SELECT id FROM graphile_worker._private_jobs
@@ -86,6 +104,27 @@ beforeEach(async () => {
   await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${deliverable}::uuid, ${product}::uuid, 'github_team', ${JSON.stringify(target)})`;
 });
 
+test("a paid purchase without a GitHub identity creates one hashed claim and sends one claim email", async () => {
+  const purchase = payload("payment-claim-1", "PaymentSucceeded");
+  delete purchase.githubUserId;
+  await enqueueWebhookEvent(database.sql, {
+    sellerId: seller,
+    source: "test",
+    externalEventId: "payment-claim-1",
+    type: "PaymentSucceeded",
+    payload: purchase,
+    now
+  });
+  const email = new MemoryEmailSender();
+  await runAvailableJobs(new FakeGitHub(), undefined, email);
+  expect(email.messages).toHaveLength(1);
+  expect(email.messages[0]?.to).toBe("buyer@example.com");
+  expect(email.messages[0]?.text).toContain("https://latchkey.test/claim/");
+  const claims = await database.sql<{ token_hash: string }[]>`SELECT token_hash FROM claims`;
+  expect(claims).toHaveLength(1);
+  expect(email.messages[0]?.text).not.toContain(claims[0]?.token_hash ?? "");
+  expect(await database.sql`SELECT * FROM email_log`).toHaveLength(1);
+}, 120_000);
 test("five duplicate webhooks produce one external event, license, and GitHub invite through Graphile tasks", async () => {
   for (let index = 0; index < 5; index += 1)
     await enqueueWebhookEvent(database.sql, {
@@ -316,4 +355,49 @@ test("an unmapped Paddle product creates drift and succeeds after mapping then r
   expect(await database.sql<{ status: string }[]>`SELECT status FROM licenses`).toEqual([
     { status: "active" }
   ]);
+});
+
+test("queued export round-trips every seller record into private object storage", async () => {
+  const requester = "00000000-0000-0000-0000-000000000061";
+  const secondLicense = "00000000-0000-0000-0000-000000000062";
+  const seat = "00000000-0000-0000-0000-000000000063";
+  await database.sql`INSERT INTO users (id, github_user_id, github_login, email) VALUES (${requester}::uuid, 61, 'export-buyer', 'buyer@example.com')`;
+  await database.sql`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at, purchase_email) VALUES (${secondLicense}::uuid, ${seller}::uuid, ${product}::uuid, 'active', 'one_time', 1, ${now.toISOString()}, 'buyer@example.com')`;
+  await database.sql`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${seat}::uuid, ${secondLicense}::uuid, ${requester}::uuid, ${now.toISOString()})`;
+  await database.sql`INSERT INTO external_events (id, seller_id, source, external_event_id, type, payload) VALUES ('00000000-0000-0000-0000-000000000064'::uuid, ${seller}::uuid, 'test', 'export-event', 'PaymentSucceeded', '{}'::jsonb)`;
+  await database.sql`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor) VALUES ('00000000-0000-0000-0000-000000000065'::uuid, ${seller}::uuid, 'license', ${secondLicense}::uuid, 'created', 'Export proof', 'system')`;
+  const exportId = await requestSellerExport(database.sql, seller, requester, now);
+  const storage = new MemoryExportStorage();
+  await runAvailableJobs(new FakeGitHub(), undefined, undefined, storage);
+  const stored = storage.objects.get(`exports/${seller}/${exportId}.json`);
+  expect(stored).toBeDefined();
+  const exported = JSON.parse(stored?.body ?? "{}") as {
+    licenses: { id: string }[];
+    seats: { id: string }[];
+    buyers: { userId: string }[];
+    events: { id: string }[];
+    activity: { id: string }[];
+  };
+  expect(exported.licenses.map((license) => license.id)).toEqual([secondLicense]);
+  expect(exported.seats.map((item) => item.id)).toEqual([seat]);
+  expect(exported.buyers.map((buyer) => buyer.userId)).toEqual([requester]);
+  expect(exported.events.map((event) => event.id)).toEqual([
+    "00000000-0000-0000-0000-000000000064"
+  ]);
+  expect(exported.activity.map((entry) => entry.id)).toEqual([
+    "00000000-0000-0000-0000-000000000065"
+  ]);
+  expect(
+    await database.sql<
+      { status: string }[]
+    >`SELECT status FROM exports WHERE id = ${exportId}::uuid`
+  ).toEqual([{ status: "ready" }]);
+  const csvExportId = await requestSellerExport(database.sql, seller, requester, now, "csv");
+  await runAvailableJobs(new FakeGitHub(), undefined, undefined, storage);
+  const csv = storage.objects.get(`exports/${seller}/${csvExportId}.csv`)?.body;
+  expect(csv).toContain('"license"');
+  expect(csv).toContain('"seat"');
+  expect(csv).toContain('"buyer"');
+  expect(csv).toContain('"event"');
+  expect(csv).toContain('"activity"');
 });
