@@ -16,8 +16,8 @@
 | M3 GitHub App | DONE | 2026-09-17 | 2026-09-17 | Live invite, acceptance, team revoke, and organization revoke verified. |
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
-| M6 Seller dashboard | BLOCKED | 2026-09-21 | | Local dashboard, private R2 exports, Paddle authentication, captured sandbox provider evidence, and the reversible GitHub live contract are verified. A deployed staging API or public webhook receiver does not exist for the connected provider-to-revoke proof. |
-| M7 Beta readiness | NOT STARTED | | | Owner approves beta gate |
+| M6 Seller dashboard | DONE | 2026-09-21 | 2026-09-22 | Sandbox purchase/refund webhooks, GitHub access and safe team/org revocation verified; temporary provider resources removed; `pnpm check` passed. |
+| M7 Beta readiness | IN PROGRESS | 2026-09-22 | | Free-beta billing switch done. Running locally against Supabase staging until Cloudflare hosting is funded (D-034). Live beta proof remains required. |
 | M8 Registry delivery | NOT STARTED | | | |
 | M9 Team licenses | NOT STARTED | | | |
 | M10 Later phase | NOT PLANNED | | | Plan after beta feedback |
@@ -28,11 +28,11 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 ## 2. Current state (update at the end of every session)
 
-**Last updated:** 2026-09-22
-**Branch in progress:** `m6/seller-dashboard`.
-**What exists:** M0 through M5 are complete. M6 now has seller-scoped API routes and a responsive dashboard with role gates, onboarding state, warnings, products, licenses, timelines, drift, manual access changes, complete JSON and CSV exports, and member roles. Buyer claim and access behavior remains covered by real-Postgres and browser tests.
-**Next action:** Create an approved non-production staging receiver, or explicitly move the staging purchase/refund acceptance proof to M7 when staging infrastructure is built.
-**Open blockers:** The required deployed staging environment does not exist in this repository. There is no running API server, public webhook receiver, tunnel client, or deployment configuration. The disposable GitHub invitation was accepted and its team and organization membership were safely revoked and confirmed absent.
+**Last updated:** 2026-09-23
+**Branch in progress:** `m7/beta-readiness`.
+**What exists:** M0 through M6 are complete. M7 now has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence, verified platform Paddle webhooks, plan-usage prompts, and required operator runbooks. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain the available database, GitHub App, R2, encryption, and session values.
+**Next action:** owner confirmed GitHub sign-in works locally. Next is a local sandbox purchase and claim, so the owner sees their own product show up under "My purchases". Platform billing is off (D-033) and no longer required.
+**Open blockers:** Cloudflare Workers Paid plan (owner will fund later, D-034) for webhooks, deploy, restore drill, alarm test, and 72-hour soak; a sending domain for Resend before real buyers get email; owner-provided legal text; final owner beta approval.
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -217,6 +217,29 @@ Format:
 
 ---
 
+### D-032: Replace AWS M7 infrastructure with Supabase and Cloudflare
+- Date: 2026-09-22
+- Status: Accepted
+- Decided by: owner
+- Context: the owner wants an early-stage deployment with no AWS infrastructure and selected Supabase for PostgreSQL.
+- Decision: Supabase is the PostgreSQL system of record. Cloudflare Workers and Containers host the API and Graphile Worker. Cloudflare R2 remains private export storage. Wrangler configuration replaces CDK for this phase.
+- Consequences: staging and production use separate Supabase projects, R2 buckets, and Cloudflare secrets. M7 requires a Cloudflare Container health check, Supabase restore drill, and no AWS resources.
+### D-034: Run the full stack locally until Cloudflare hosting is funded
+- Date: 2026-09-23
+- Status: Accepted
+- Decided by: owner (hosting timing), agent (local URL rule)
+- Context: Cloudflare Containers need the Workers Paid plan ($5 a month). The owner cannot pay for it yet and has no domain. The owner chose to finish the remaining M7 work locally and move to Cloudflare hosting at the end, before the beta launch.
+- Decision: until then, the API and worker run on the owner's machine against Supabase staging, with `LATCHKEY_PUBLIC_BASE_URL=http://localhost:8080` and Resend's shared `onboarding@resend.dev` sender. The hosted config accepts plain `http://localhost` or `http://127.0.0.1` only when `NODE_ENV` is not `production`. Every deployed runtime sets `NODE_ENV=production` and still requires https.
+- Alternatives: pay for Workers Paid now (owner cannot yet); rewrite for free Workers (a stack change and days of risk); a free host that sleeps when idle (pauses the worker and delays buyer access).
+- Consequences: GitHub webhooks cannot reach a local machine, so live webhook proof, the restore drill on the deployed stack, the alarm test, and the 72-hour soak wait for Cloudflare hosting. Until a sending domain is verified, Resend only delivers to the owner's own address.
+### D-033: Private beta is free until platform billing is deliberately launched
+- Date: 2026-09-23
+- Status: Accepted
+- Decided by: owner
+- Context: the owner wants early users to use Latchkey freely for marketing while no Latchkey payment gateway is configured.
+- Decision: Latchkey does not collect its own subscription payments, require a commercial plan, or require platform Paddle prices or a platform billing webhook during private beta. Sellers continue to use their own payment providers for their products.
+- Alternatives: require the planned Paddle subscription setup now, which would slow the beta and add a payment dependency before it is useful.
+- Consequences: hosted runtime and Cloudflare deployment configuration must make platform billing optional or disabled by default. Existing billing code and migrations remain dormant until a future owner-approved launch.
 ### D-031: Encode CSV exports as typed records
 - Date: 2026-09-22
 - Status: Accepted
@@ -291,6 +314,74 @@ Format (newest first):
 - Next step:
 ```
 
+### 2026-09-23: M7 fix Secure-cookie bug found in the owner's live sign-in test
+- Branch / commits: `m7/beta-readiness`. Uncommitted.
+- Goal: the owner tried GitHub sign-in at `http://localhost:8080` and got `{"error":{"code":"auth_error","message":"Please sign in with GitHub to continue."}}` on `/purchases` right after approving on GitHub.
+- Done: found the cause. `apps/api/src/server.ts` hardcoded `secureCookies: true` for the buyer session cookie. A cookie marked Secure is never stored by the browser over plain http, so the session cookie set at the end of the GitHub callback was silently dropped, and every next request looked signed out. `loadHostedRuntimeConfig` now returns a `secureCookies` field computed from whether `LATCHKEY_PUBLIC_BASE_URL` is https (true for every deployed case, false only for the D-034 local http exception, which is the same check `publicBaseUrlAllowed` already uses). `server.ts` now passes `hosted.secureCookies` instead of the hardcoded value.
+- Proof: `pnpm test packages/config` 9 passed. `pnpm test:integration` (`apps/api/src/buyer.integration.test.ts`) 8 passed, including a new test that runs the real `/auth/github` then `/auth/github/callback` flow with a plain http base URL and confirms the Set-Cookie header has no Secure attribute and the next `/purchases` request (sending that cookie back, the way a browser would) returns 200 instead of the auth error; a second new test confirms an https base URL still gets a Secure cookie. Restarted the local API on the owner's machine; `/auth/github` still redirects to GitHub with the correct localhost callback and the API log has zero error lines.
+- Negative tests added and how each was proven non-vacuous: "hosted config computes secureCookies from the public base URL" (hardcoded it back to `true` in `loadHostedRuntimeConfig`, failed); "a claim link signed in over plain http still works on the next request" (hardcoded `buyer.ts` cookie options back to `secure: true`, failed, matching the owner's exact symptom). Both restored and passing.
+- Decisions made: none new. This applies D-034 (already accepted) correctly; it does not change it.
+- Edge cases considered: an https base URL must still get a Secure cookie (tested, so the fix cannot accidentally weaken production security); the local-http exception already only allows `localhost`/`127.0.0.1` outside production, so `secureCookies` cannot go false for any real deployed origin.
+- Not done / deferred: the owner still needs to click through the real GitHub OAuth consent screen in a browser; I could not do that from here since it needs the owner's GitHub login. Everything else from the previous entry (Cloudflare hosting, webhooks, soak) is still waiting on D-034.
+- Docs updated: architecture section 13, `m7-supabase-cloudflare-setup.md`, this work log.
+- Next step: owner retries GitHub sign-in at `http://localhost:8080/auth/github?returnTo=/purchases` with the restarted server.
+### 2026-09-23: M7 fix a second, deeper bug: only one Set-Cookie header ever reached the browser
+- Branch / commits: `m7/beta-readiness`. Uncommitted.
+- Goal: the Secure-cookie fix restarted, and the owner still got "Please sign in with GitHub to continue." immediately after approving on GitHub, in a fresh incognito window, twice.
+- Done: added a small diagnostic request log to `server.ts` (method, path, status, whether a session cookie arrived, and Set-Cookie header names and their attributes with values redacted, never a token or secret) and had the owner retry. The log showed the callback correctly set both `lk_session` and `lk_csrf` with no Secure flag, redirected to `/purchases`, and `/purchases` still saw no cookie. Found the real cause: `apps/api/src/server.ts`'s `send()` function copied `Response` headers onto the real `http.ServerResponse` with `result.headers.forEach((value, name) => response.setHeader(name, value))`. A Fetch `Headers` object yields one `forEach` callback per `set-cookie` entry rather than combining them (this is a deliberate Fetch spec carve-out, https://github.com/whatwg/fetch/pull/1346), so calling `response.setHeader("set-cookie", ...)` a second time silently replaced the first. Only the last cookie set on any response (here, `lk_csrf`) ever left the process. `lk_session`, the one that proves sign-in, was dropped on every response that set more than one cookie, in every environment, since `server.ts` was first written. This was invisible to every existing test because they all call Hono's own `app.request()`/`app.fetch()` directly, which never passes through this Node `http.ServerResponse` translation layer.
+- Fix: `send()` now collects every header value under its name into an array first, then calls `setHeader(name, values)` once per name, so Node emits one line per value. Extracted the Node bridging into an exported `createNodeRequestHandler(app, now)` so it can be driven over a real `node:http` socket in a test, independent of environment config or the database.
+- A second, smaller problem surfaced while testing this: the shared `**/*.test.{ts,mts,cts}` ESLint block always resolved `import/no-extraneous-dependencies` against the root `package.json` only, so a test file could never import a package's own regular dependencies (already worked around once this session in `billing.test.ts` by avoiding a direct `hono` import). Fixed by passing an array of every workspace package.json to `packageDir` for that rule, so a test now sees the dependencies of the root and of whichever package it lives in.
+- Proof: `pnpm check` exit 0: lint, typecheck, unit 80 passed (23 files), core coverage 36 passed at 97.09% lines, integration 33 passed (7 files), Playwright e2e, build, Prettier clean. New `apps/api/src/server.test.ts` opens a real `node:http` server on an ephemeral port (no config, no database) and uses `fetch()` against it: one test confirms both cookies arrive from a single response with two `Set-Cookie` headers, the other reproduces the owner's exact callback-then-purchases sequence over a real socket and confirms the second request now succeeds.
+- Negative tests added and how each was proven non-vacuous: "every Set-Cookie header reaches the real socket, not just the last one" and "a cookie set on the callback response is present on the browser's next real request" (reverted `send()` to the original `forEach` + single `setHeader` call, both failed with the owner's exact symptom reproduced over a real socket; restored, both passed).
+- Decisions made: none new; this is a bug fix plus a matching lint-config fix, both decide-yourself per section 10 (internal tooling, no behavior owners or buyers would notice beyond the fix itself).
+- Edge cases considered: a response with only one cookie, or none, still needs exactly one header line each (covered by the existing buyer integration tests, which kept passing); a header repeated for reasons other than cookies (none currently exist in this app) is now handled the same correct way.
+- Owner confirmed: retried in a fresh incognito window and landed on "My purchases" signed in ("You have no purchases yet", correct for a GitHub account with nothing bought yet). Server log for that exact request: `GET /purchases -> 200 sessionCookieSent=true`. Diagnostic log stays on for now at the owner's choice, to help with the upcoming sandbox purchase and claim test; remove it before the Cloudflare deploy.
+- Docs updated: this work log.
+- Next step: owner retries GitHub sign-in at `http://localhost:8080/auth/github?returnTo=/purchases` with the restarted server.
+### 2026-09-23: M7 free-beta billing switch, local staging run, webhook route fix
+- Branch / commits: `m7/beta-readiness`, created from the uncommitted M7 work that was sitting on `m6/seller-dashboard` (the docs already named `m7/beta-readiness`, the branch did not exist yet). Uncommitted.
+- Goal: implement D-033 so platform Paddle billing is optional and off by default, fill the remaining staging values with the owner, and run the real API and worker locally against Supabase staging while Cloudflare hosting waits for funding (D-034).
+- Done: `loadPlatformBillingConfig` now returns `{ enabled: false }` unless `LATCHKEY_PLATFORM_BILLING_ENABLED=true`, and then still requires all four Paddle values. `createPlatformBillingRoutes` mounts no route when disabled. The four Paddle secrets are removed from `wrangler.jsonc` required secrets, and `infra/index.mjs` passes them only when present. The hosted config accepts `http://localhost` only outside production. With the owner, filled GitHub OAuth client id and secret, a new webhook secret, and the Resend key; set the Resend shared sender and the localhost base URL; replaced the four Paddle placeholders in the ignored staging file with the disabled switch. Added `supabase/.temp` to `.prettierignore` (CLI machine state, already ignored by Git, was failing `format:check`).
+- Bug found and fixed during the live run: `POST /webhooks/latchkey-billing/paddle` returned 500 with a raw `PostgresError` in the log. The seller route `/webhooks/:provider/:connectionId` matched it and passed `paddle` to a UUID query. So a malformed connection id crashed with a 500, and platform billing could never have been reached even when enabled. The fix: the route only matches `(?:test|paddle|stripe)` and a non-UUID connection id is treated as unknown (401, no lookup). The provider pattern is grouped on purpose: an ungrouped Hono `{a|b}` pattern is not anchored and matched `latchkey-billing` and `testing` as providers (checked with a scratch script).
+- Proof: `pnpm check` exit 0: lint, typecheck, unit 77 passed (22 files), core coverage 36 passed at 97.09% lines, integration 31 passed (7 files), Playwright e2e 3 passed, build, Prettier clean. Local run on the owner's machine against Supabase staging: API `/healthz` 200, worker `/healthz` 200 and "Worker connected and looking for jobs", `/auth/github` 302 to GitHub with `redirect_uri=http://localhost:8080/auth/github/callback`, disabled billing route 404, malformed and unknown connection ids 401 `auth_error`, bad GitHub signature 401, zero `PostgresError` lines after the fix.
+- Negative tests added and how each was proven non-vacuous: "platform billing is disabled by default" (broke default to `true`, failed); "disabled platform billing exposes no webhook route" (mounted the route anyway, failed); "rejects a plain http base URL in production and for non-local hosts" (removed the production check, failed; allowed any host, failed); "a malformed connection id is rejected like an unknown connection" (removed the UUID check, failed); "enabled platform billing is reachable when mounted after the seller webhook routes" (restored the ungrouped pattern, failed). All restored and passing. Existing provider route tests now use a UUID connection id so they still fail for the reason they name.
+- Decisions made: D-034.
+- Edge cases considered: template placeholders left in a vars file while billing is off (ignored, tested); switch set to an unexpected value (rejected, tested); lookalike provider names (404, tested); `localhost.example.com` over http (rejected, tested).
+- Not done / deferred: live browser sign-in with GitHub needs the owner to click through. GitHub webhooks, Cloudflare deploy, restore drill, alarm test, and 72-hour soak wait for hosting (D-034). Legal text and final beta approval from the owner.
+- Docs updated: architecture sections 9 and 16, `m7-supabase-cloudflare-setup.md`, `.env.example`, `infra/.dev.vars.example`, status board, current state, D-034.
+- Next step: owner signs in with GitHub on localhost; then the full buyer claim flow locally with a sandbox purchase.
+### 2026-09-23: M7 Supabase staging provisioned
+- Branch / commits: `m7/beta-readiness`; uncommitted implementation and documentation changes.
+- Goal: provision the owner-approved managed PostgreSQL staging database and connect it to the local deployment configuration without exposing secrets.
+- Done: installed the project-scoped Supabase CLI, authenticated it through the owner's CLI login, created the free `latchkey-staging` project in `ap-south-1`, linked local Supabase metadata, generated a database password locally, and stored the session-pooler URL only in ignored `infra/.dev.vars.staging`. Copied the available local GitHub App and R2 values into that file and generated persistent encryption and session secrets. Ten external-service placeholders remain.
+- Proof: the repository migrator exited 0 on the first staging run and exited 0 again without reapplying migrations. A read-only remote query reported all seven migration ids, from `0000_bootstrap_schema_marker` through `0006_billing`.
+- Negative tests added and how each was proven non-vacuous: none. This was external staging provisioning only, with no application gate change.
+- Decisions made: none.
+- Edge cases considered: a free-plan organization rejects an explicit instance-size selection, so the project was created with the free-plan default. The migration validator requires a session secret even though migrations do not use sessions, so a generated in-memory value was used only for the CLI process and was not saved.
+- Not done / deferred: the remaining staged runtime secrets, Cloudflare deploy, restore drill, alarm test, 72-hour soak, legal text, and final beta gate remain required for M7.
+- Docs updated: status board current state and this work log.
+- Next step: add the remaining values to `infra/.dev.vars.staging`, upload them to Cloudflare, then deploy the staging Containers.
+### 2026-09-22: M7 Supabase and Cloudflare setup started
+- Branch / commits: `m7/beta-readiness`; uncommitted implementation and documentation changes.
+- Goal: replace the originally planned AWS beta infrastructure with the owner-approved Supabase and Cloudflare setup, while preserving PostgreSQL transactions, Graphile Worker, safe reconciliation, and R2 exports.
+- Done: added a reversible billing migration, active-buyer plan usage, 90 percent warnings, a 14-day over-limit grace period, and an explicit always-true buyer-access guard. Added an idempotent, verified Paddle endpoint for Latchkey subscription events and a seller-scoped billing read route. Added hosted API and worker entry points, Cloudflare Container manifest, secrets template, Docker secret exclusion, Supabase and Cloudflare setup guide, security gate map, and all seven required runbooks.
+- Proof: focused plan and platform-webhook tests passed 7 tests. Real-Postgres migration up, down, up and seller billing integration passed 2 files and 6 tests. TypeScript validation passed after the hosted runtime additions. Cloudflare Wrangler dry validation began and built the local container image; the Docker ignore policy was then added to prevent local environment files from entering image context, so it must be run again after credentials are supplied.
+- Negative tests added and how each was proven non-vacuous: `apps/api/src/billing.test.ts` sends a bad Paddle signature and proves the store receives zero events. `apps/api/src/seller.integration.test.ts` proves seller B receives 404 for seller A billing while seller A receives the usage report. The plan tests assert `accessChangesAllowed: true` in warning, grace, and expired-over-limit states.
+- Decisions made: D-032.
+- Edge cases considered: duplicate billing webhooks, unknown prices, missing seller custom data, invalid signatures, buyer counts across multiple licenses, canceled subscriptions, isolated staging and production R2 buckets, Docker build-context secret leakage, Supabase restore gaps, GitHub and provider outages. Live provider edge cases remain for staging proof.
+- Not done / deferred: production deployment, legal pages, security audit and dependency scan, auth and claim rate-limit pass, alarms, restore drill, and 72-hour staging soak. They require real credentials, external configuration, owner legal text, or elapsed staging time and cannot be claimed complete yet.
+- Docs updated: status board, current state, implementation plan, architecture, deployment guide, security gate map, and runbooks.
+- Next step: substitute the staging values in `infra/.dev.vars.staging`, upload secrets, deploy staging, then start the required live proof and soak.
+### 2026-09-22: M6 connected Sandbox completion
+- Branch / commits: `m6/seller-dashboard`; implementation and documentation changes remain uncommitted.
+- Goal: complete the connected Paddle Sandbox purchase, refund, and GitHub-revocation acceptance proof.
+- Done: verified real Paddle `transaction.completed` and approved-refund webhooks through an approved temporary Cloudflare Quick Tunnel; verified GitHub team and organization membership became active, then confirmed both absent after the refund-driven revoke. Fixed stale pre-claim grant state, Paddle semicolon-delimited signature parsing, managed-membership provenance, and GitHub App team-safety enumeration. Removed the temporary destination, client token, tunnel, receiver, checkout artifacts, and secrets.
+- Proof: `pnpm check` passed with exit code 0. Its integration phase passed 7 files / 31 tests; Playwright passed 3 browser tests. Focused provider and GitHub client tests passed after the respective fixes. Existing dashboard screenshots remain at `test-results/m6-dashboard-desktop.png` and `test-results/m6-dashboard-mobile.png`.
+- Negative tests added and how each was proven non-vacuous: the real Sandbox webhook initially returned 401 before the Paddle header parser accepted its documented semicolon delimiter; the real delivery succeeded after the correction. Full validation initially failed on the stale migration-list expectation, then passed after that test was updated and formatted.
+- Edge cases considered: failed temporary tunnel DNS, asynchronous Sandbox refund approval, webhook raw-body verification, previously active GitHub membership, and safe organization removal only for managed provenance.
+- Not done / deferred: none for M6.
+- Docs updated: status board, current state, and this work log.
+- Next step: M7 only after owner approval of the beta gate.
 ### 2026-09-22: M6 live GitHub revoke verification
 - Branch / commits: `m6/seller-dashboard`; no implementation change.
 - Goal: complete the owner-authorized live GitHub portion of the M6 test purchase/refund acceptance proof.

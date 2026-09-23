@@ -33,7 +33,7 @@ flowchart LR
     EM[Email provider]
   end
 
-  subgraph Latchkey on AWS
+  subgraph Latchkey on Cloudflare and Supabase
     WEB[web\nNext.js\nseller dashboard, buyer portal, claim pages]
     API[api\nHono on Node\nwebhooks, registry, public API]
     WRK[worker\nGraphile Worker\njobs, reconciler, cron]
@@ -77,12 +77,12 @@ flowchart LR
 | Validation | Zod | Parse every external payload and request body |
 | Auth | GitHub App user authorization, server-side sessions in Postgres | Sellers and buyers are developers |
 | Email | Resend behind an `EmailSender` interface | Fast to ship; swappable for SES |
-| Storage | AWS S3 for registry artifacts; Cloudflare R2 (private, S3-compatible) for seller exports | Export objects use the `exports/` prefix and a 7-day lifecycle |
-| Secrets | AWS Secrets Manager + KMS envelope encryption | Encrypt provider keys and webhook secrets per seller |
-| Hosting | AWS ECS Fargate (web, api, worker) behind ALB, RDS Postgres | Owner is AWS-experienced |
-| IaC | AWS CDK (TypeScript) | Same language |
+| Storage | Cloudflare R2 (private, S3-compatible) for seller exports and future registry artifacts | Export objects use the `exports/` prefix and a 7-day lifecycle |
+| Secrets | Cloudflare Worker secret bindings plus an application encryption key for encrypted provider credentials | Encrypt provider keys and webhook secrets per seller |
+| Hosting | Cloudflare Workers and Containers for the API and worker, Supabase PostgreSQL | Owner is AWS-experienced |
+| IaC | Wrangler configuration and Cloudflare Containers manifests | Same language |
 | Errors | Sentry | Exceptions with context |
-| Logs / metrics | Structured JSON logs (pino) to CloudWatch, custom metrics | Searchable, alarmable |
+| Logs / metrics | Structured JSON logs and Cloudflare Workers observability, with custom metrics | Searchable, alarmable |
 | Tests | Vitest, Testcontainers (Postgres), Playwright | See `CLAUDE.md` testing rules |
 | Our own billing | Paddle | Works for a Pakistan-based business (D-013) |
 
@@ -408,6 +408,8 @@ interface ProviderAdapter {
 }
 ```
 
+The seller webhook route `POST /webhooks/:provider/:connectionId` only matches implemented providers (`test`, `paddle`, `stripe`). A connection id that is not a UUID is treated like an unknown connection: 401 `auth_error`, with no database lookup. This keeps `POST /webhooks/latchkey-billing/paddle` (Latchkey's own billing, only mounted when `LATCHKEY_PLATFORM_BILLING_ENABLED=true`, off during the free beta per D-033) from being captured by the seller route.
+
 Each adapter ships with:
 - Captured real sandbox fixtures (never hand-invented payloads) under `fixtures/webhooks/<provider>/`.
 - Signature tests: valid, tampered body, wrong secret, stale timestamp, missing header.
@@ -486,7 +488,7 @@ Rules: never swallow errors, never return raw provider or GitHub error bodies to
 
 - **Tenant isolation:** every repository function takes `sellerId` and filters by it. No raw queries in apps. An isolation test matrix covers every seller-scoped route: another seller's id returns 404 and mutates nothing, while the owner still succeeds.
 - **Secrets:** envelope encryption with KMS data keys, AES-256-GCM, `key_version` stored for rotation. GitHub App private key only in Secrets Manager.
-- **Sessions:** httpOnly, Secure, SameSite=Lax cookies; rotation on login; CSRF tokens on state-changing form posts.
+- **Sessions:** httpOnly, Secure, SameSite=Lax cookies; rotation on login; CSRF tokens on state-changing form posts. Secure is dropped only when `LATCHKEY_PUBLIC_BASE_URL` is the local http exception (D-034), because browsers refuse a Secure cookie over plain http and would otherwise silently drop the session on every request.
 - **Webhooks:** verified before storage; per-connection unguessable URL plus signature.
 - **Tokens:** random 32 bytes, stored hashed, shown once.
 - **Input:** Zod parse at every boundary; seller-provided text rendered escaped; no `dangerouslySetInnerHTML`.
@@ -505,7 +507,7 @@ Alarms: signature failures spike, job queue depth above threshold for 10 minutes
 
 Runbooks live in `docs/runbooks/` (created in M7): replay events, reprocess unmapped product, installation lost, provider outage, GitHub outage, rotate secrets, restore from backup.
 
-Backups: RDS automated backups + point-in-time recovery, S3 versioning.
+Backups: Supabase backups and restore drills, plus private R2 lifecycle rules.
 
 ---
 
@@ -534,6 +536,8 @@ Backups: RDS automated backups + point-in-time recovery, S3 versioning.
 - All config via env vars parsed by `packages/config` with Zod at boot. Missing or invalid config crashes the process at startup, never at request time.
 - `.env.example` lists every variable with a comment and is updated in the same change that adds a variable.
 - Separate GitHub Apps per environment.
+- `LATCHKEY_PUBLIC_BASE_URL` must be https. Plain `http://localhost` or `http://127.0.0.1` is accepted only when `NODE_ENV` is not `production`, for running the full stack on a developer machine (D-034).
+- Latchkey platform billing is off unless `LATCHKEY_PLATFORM_BILLING_ENABLED=true` (D-033). When off, the Paddle platform values are ignored and not required by `infra/wrangler.jsonc`.
 
 ---
 
