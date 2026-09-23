@@ -227,7 +227,7 @@ export const reconcileStoredGrant = async (
           : grant.desired === "absent"
             ? "removed"
             : "none";
-      await transaction`UPDATE grants SET observed = ${finalState}, last_reconciled_at = ${now.toISOString()}, attempts = 0, invite_sent_at = CASE WHEN ${sentInvitation} THEN ${now.toISOString()} ELSE invite_sent_at END, invite_count = invite_count + ${sentInvitation ? 1 : 0} WHERE id = ${grant.id}::uuid`;
+      await transaction`UPDATE grants SET observed = ${finalState}, provenance = CASE WHEN ${sentInvitation} THEN 'added_by_us' ELSE provenance END, last_reconciled_at = ${now.toISOString()}, attempts = 0, invite_sent_at = CASE WHEN ${sentInvitation} THEN ${now.toISOString()} ELSE invite_sent_at END, invite_count = invite_count + ${sentInvitation ? 1 : 0} WHERE id = ${grant.id}::uuid`;
       await transaction`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${grant.seller_id}::uuid, 'grant', ${grant.id}::uuid, ${finalState}, 'reconciled desired state', 'system', ${now.toISOString()})`;
     });
   } catch (error) {

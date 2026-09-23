@@ -9,6 +9,7 @@
   "dependencies": {
     "@latchkey/config": "workspace:*",
     "@latchkey/core": "workspace:*",
+    "@latchkey/crypto": "workspace:*",
     "@latchkey/db": "workspace:*",
     "@latchkey/delivery": "workspace:*",
     "@latchkey/github": "workspace:*",
@@ -19,7 +20,6 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@latchkey/crypto": "workspace:*",
     "@latchkey/testing": "workspace:*"
   }
 }

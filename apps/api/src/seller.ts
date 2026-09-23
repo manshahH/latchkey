@@ -1,4 +1,4 @@
-﻿import { Hono, type Context } from "hono";
+import { Hono, type Context } from "hono";
 import type { ExportStorage } from "@latchkey/delivery";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import {
   exportSellerData,
   getSellerExport,
   getSellerOnboarding,
+  getSellerPlanUsage,
   listSellerBanners,
   listSellerDrift,
   listSellerMembers,
@@ -71,6 +72,18 @@ export const createSellerApi = ({ sql, now, exportStorage }: SellerApiOptions) =
     const sellerId = id.parse(c.req.param("sellerId"));
     await requireSellerRole(sql, sellerId, user, "viewer");
     return c.json(await getSellerOnboarding(sql, sellerId));
+  });
+  app.get("/sellers/:sellerId/billing", async (c) => {
+    const user = await session(c);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "viewer");
+    return c.json(await getSellerPlanUsage(sql, sellerId, now()));
+  });
+  app.get("/sellers/:sellerId/billing", async (c) => {
+    const user = await session(c);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "viewer");
+    return c.json(await getSellerPlanUsage(sql, sellerId, now()));
   });
   app.get("/sellers/:sellerId/banners", async (c) => {
     const user = await session(c);

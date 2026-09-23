@@ -1,3 +1,4 @@
+import { ExternalPermanentError, ExternalTransientError } from "@latchkey/core";
 export interface EmailMessage {
   html: string;
   subject: string;
@@ -69,3 +70,40 @@ export class MemoryEmailSender implements EmailSender {
 }
 
 export const emailReady = (): string => "email";
+
+export interface ResendEmailOptions {
+  apiKey: string;
+  from: string;
+  fetch?: typeof fetch;
+}
+
+/** Resend is called only by server processes. API keys and recipients never reach a browser. */
+export const createResendEmailSender = ({
+  apiKey,
+  from,
+  fetch: fetcher = fetch
+}: ResendEmailOptions): EmailSender => ({
+  send: async (message) => {
+    const response = await fetcher("https://api.resend.com/emails", {
+      body: JSON.stringify({
+        from,
+        html: message.html,
+        subject: message.subject,
+        text: message.text,
+        to: [message.to]
+      }),
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      method: "POST"
+    });
+    if (!response.ok)
+      throw response.status === 429 || response.status >= 500
+        ? new ExternalTransientError("Email is temporarily unavailable.")
+        : new ExternalPermanentError("Email could not be sent.");
+    const body: unknown = await response.json();
+    const id =
+      typeof body === "object" && body !== null && typeof (body as { id?: unknown }).id === "string"
+        ? (body as { id: string }).id
+        : "accepted";
+    return { id };
+  }
+});

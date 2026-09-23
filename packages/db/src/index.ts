@@ -1,3 +1,9 @@
+export {
+  downgradeExpiredPlatformBilling,
+  getSellerPlanUsage,
+  storePlatformBillingEvent
+} from "./billing.js";
+export type { PlatformBillingEvent } from "./billing.js";
 export { createDatabase } from "./client.js";
 export { storeExternalEvent } from "./events.js";
 export type { StoredEvent } from "./events.js";

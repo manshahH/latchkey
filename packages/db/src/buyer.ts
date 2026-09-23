@@ -221,7 +221,9 @@ export const claimSeat = async (
     `;
     await transaction`UPDATE claims SET used_count = used_count + 1 WHERE id = ${claim.id}::uuid`;
     const grants = await transaction<{ id: string }[]>`
-      UPDATE grants SET desired = ${license.status === "active" ? "present" : "absent"}
+      UPDATE grants
+      SET desired = ${license.status === "active" ? "present" : "absent"},
+          observed = CASE WHEN observed = 'needs_attention' THEN 'none' ELSE observed END
       WHERE seat_id = ${seat.id}::uuid RETURNING id
     `;
     for (const grant of grants)

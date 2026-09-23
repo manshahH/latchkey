@@ -232,7 +232,7 @@ Read: product sections 6, 8, 9.
 
 **Tasks**
 1. Our own billing with Paddle: plans from product section 10, active buyer counting, soft limit (warning at 90%, grace 14 days over limit, never cut buyers' access because a seller exceeded a plan).
-2. Infrastructure with CDK: VPC, RDS, ECS services, ALB, S3, KMS, Secrets Manager, CloudWatch alarms from architecture 14, backups.
+2. Infrastructure with Cloudflare Containers and Workers, Supabase PostgreSQL, private R2 exports, Cloudflare secret bindings, observability, alarms, and backups. No AWS infrastructure in the early beta (D-032).
 3. Staging environment deployed from main, production from tags.
 4. Runbooks in `docs/runbooks/`: replay events, reprocess unmapped, installation lost, provider outage, GitHub outage, rotate secrets, restore backup.
 5. Security pass: dependency audit, secrets scan, review of every gate listed in `CLAUDE.md` invariants with a link to its negative test, rate limits on auth, claim, resend, registry.

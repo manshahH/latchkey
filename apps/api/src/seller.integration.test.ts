@@ -1,4 +1,4 @@
-﻿import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { runMigrations } from "graphile-worker";
 import { applyMigrations, createBuyerSession, createDatabase } from "@latchkey/db";
 import { startPostgres, type TestPostgres } from "@latchkey/testing";
@@ -69,7 +69,15 @@ test("seller B cannot read or export seller A while seller A can", async () => {
     ownerB = await signedIn(4n, sellerB, "owner");
   expect((await request(`/sellers/${sellerA}/licenses`, ownerB)).status).toBe(404);
   expect((await request(`/sellers/${sellerA}/export`, ownerB)).status).toBe(404);
+  expect((await request(`/sellers/${sellerA}/billing`, ownerB)).status).toBe(404);
   expect((await request(`/sellers/${sellerA}/licenses`, ownerA)).status).toBe(200);
+  expect(
+    (await (await request(`/sellers/${sellerA}/billing`, ownerA)).json()) as object
+  ).toMatchObject({
+    accessChangesAllowed: true,
+    activeBuyerCount: 1,
+    state: "within_limit"
+  });
   const exported = (await (await request(`/sellers/${sellerA}/export`, ownerA)).json()) as {
     licenses: { id: string }[];
   };
