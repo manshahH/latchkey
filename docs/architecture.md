@@ -492,6 +492,19 @@ Repo access cannot pin a version. For github_team products with `updates_until`,
 
 ---
 
+## 11a. Web app (W1)
+
+`apps/web` is the Next.js (App Router) frontend for buyers, sellers, and the marketing site. It replaces the server-rendered HTML in `apps/api` over time (D-040); the API's HTML routes still exist until the web app is deployed in their place.
+
+- **One origin.** The browser only talks to the web origin. `next.config.ts` rewrites every API path (`/auth/*`, `/logout`, `/me`, `/buyer/*`, `/sellers/*`, `/webhooks/*`, `/r/*`, `/healthz`) to `LATCHKEY_API_ORIGIN`, so session cookies stay first party and no CORS is needed. Pages (`/`, `/claim/:token`, `/access/:licenseId`, `/purchases`, `/dashboard`, `/s/:sellerId/...`) are rendered by Next.
+- **Server rendering reads the API directly.** `src/lib/api.ts` fetches `LATCHKEY_API_ORIGIN` server side, forwarding only the `lk_session` cookie, and parses every response with Zod (`src/lib/schemas.ts`). A 401 renders a sign-in prompt; a 404 renders "not found". Browser-side changes go through `src/lib/client.ts`, same origin, with the `x-csrf-token` header the API requires.
+- **Tenant isolation in the UI.** `/s/:sellerId` loads `/me` and answers 404 for any seller the viewer is not a member of, the same answer the API gives (invariant 6). Role checks stay on the server; the UI only hides controls a role cannot use.
+- **API additions for the web app.** `GET /me` (signed-in identity and seller memberships), a JSON branch on `GET /claim/:token`, and the seller license list now returns GitHub handle, seat usage, and an access state that maps every grant state (`removed_externally` and `invite_failed` read as needing the seller). Drift items tied to a grant return that license id and handle. The license timeline includes activity logged against the license's seats and grants, not only the license row.
+- **Fixture mode.** `LATCHKEY_WEB_FIXTURES=1` renders every screen from built-in sample data (`src/lib/fixtures.ts`) for design review and the Playwright suite (`e2e/web.spec.ts`). `fixturesEnabled` throws in production (D-041).
+- **Design system.** Tokens, components, and theming live in `src/app/*.css`. The direction and its rules are recorded in D-042.
+
+---
+
 ## 12. Error handling model
 
 Every application error after startup is one of these classes (`packages/core/errors.ts`). Startup configuration uses `ConfigurationError` from `packages/config` because it exits before the application has started:

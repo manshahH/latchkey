@@ -20,6 +20,7 @@
 | M7 Beta readiness | IN PROGRESS, deployment paused | 2026-09-22 | | Everything buildable locally is done (see the M7 remaining-work list below). Cloudflare deployment deliberately paused until the owner is ready (D-034); resume there, do not start M8's registry deploy pipeline as a substitute. |
 | M8 Registry delivery | DONE | 2026-09-27 | 2026-09-27 | Buyer token management, release-triggered artifact building, and the registry serving endpoint all done and proven. Remaining small tasks (fingerprinting, update-window UI/email) deferred to real beta feedback, matching the plan's own note. |
 | M9 Team licenses | DONE | 2026-09-27 | 2026-09-27 | Manager role, seat invite by claim link or GitHub username, safe release, seat-count changes, license type/terms. Owner also asked for 3 M10 items (personal repos, zip downloads, cross-seller buyer page) in the same pass; all 3 done as of 2026-09-28 (personal repos resolved via D-039's org-move guidance, no new code). |
+| W1 Web frontend | IN PROGRESS | 2026-09-28 | | Next.js app in `apps/web`: design system, landing, buyer claim, access, and purchases, seller home, buyers, buyer page, products, team. Setup and product editing screens are next (D-040). |
 | M10 Later phase | NOT PLANNED | | | Plan after beta feedback |
 
 Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
@@ -29,9 +30,9 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 ## 2. Current state (update at the end of every session)
 
 **Last updated:** 2026-09-28
-**Branch in progress:** `m9/team-licenses` (this slice: the personal-repo decision and doc updates, on top of the same branch since M9 had not yet been merged when this started).
-**What exists:** M0 through M6 are complete. M7 has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence (off by default, D-033), plan-usage evaluation, required operator runbooks, a verified invariant-to-test table, and a passed dependency/secrets security pass. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain every value the local stack needs. A full sandbox purchase, an unmapped-product reprocess, a claim, and a real Resend email delivery have all been proven against the live local API and worker running on the owner's machine. M8 registry delivery and M9 team licenses are both done. Plain zip downloads (M10) are done: a standalone `download` deliverable type, release-triggered zip building, and a buyer download endpoint. Personal-repo delivery (the third M10 item the owner asked for) is also done, but as a decision and product guidance, not code: D-039 supersedes D-038, the GitHub App will not request repository Administration, and `docs/product.md` now has the verified steps for a seller to move a personal-account repo into a free organization and use the `github_team` delivery Latchkey already has.
-**Next action:** All three M10 items the owner asked for alongside M9 are complete. Nothing else is queued; the owner has not asked for further M10 scope (more payment providers, leak alerts) and it should not be started without asking first. Nothing is buildable locally for M7: what remains needs either the owner's Cloudflare Workers Paid plan (D-034) or legal text before the real public launch (D-035), both deliberately deferred by the owner.
+**Branch in progress:** `w1/web-foundation` (the new Next.js frontend, D-040).
+**What exists:** M0 through M6 are complete. M7 has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence (off by default, D-033), plan-usage evaluation, required operator runbooks, a verified invariant-to-test table, and a passed dependency/secrets security pass. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain every value the local stack needs. A full sandbox purchase, an unmapped-product reprocess, a claim, and a real Resend email delivery have all been proven against the live local API and worker running on the owner's machine. M8 registry delivery and M9 team licenses are both done. Plain zip downloads (M10) are done: a standalone `download` deliverable type, release-triggered zip building, and a buyer download endpoint. Personal-repo delivery (the third M10 item the owner asked for) is also done, but as a decision and product guidance, not code: D-039 supersedes D-038, the GitHub App will not request repository Administration, and `docs/product.md` now has the verified steps for a seller to move a personal-account repo into a free organization and use the `github_team` delivery Latchkey already has. W1 is under way: `apps/web` is a Next.js app with the full buyer flow, the core seller screens, and the landing page, running against the API or on sample data (D-041).
+**Next action:** W2: seller setup screens (GitHub connect, provider connect, product and mapping editing), plus three API follow-ups from the W1 entry: a real retry for stuck buyers, the buyer-side state mapping, and telling the access page which delivery types a product has. Nothing is buildable locally for M7: what remains needs either the owner's Cloudflare Workers Paid plan (D-034) or legal text before the real public launch (D-035), both deliberately deferred by the owner.
 **Open blockers:** Cloudflare Workers Paid plan for webhooks, deploy, restore drill, alarm test, and 72-hour soak; auth/claim/resend rate limiting, which is Cloudflare Rate Limiting rules configured at deploy time (D-036); a sending domain for Resend before real buyers (not just the owner) get email; legal text before the real public launch (not the private beta, D-035); final owner beta approval.
 **M7 remaining work (all paused, owner said leave deployment for now):**
 1. Fund and configure the Cloudflare Workers Paid plan, then follow `docs/m7-supabase-cloudflare-setup.md` to upload secrets, dry-run validate, and deploy staging from `main`.
@@ -261,6 +262,33 @@ Format:
 - Alternatives: block all further beta progress until legal text exists (stalls the beta with no real users yet); publish placeholder legal text now (worse than no page, and not the owner's to decide alone under section 10).
 - Consequences: `docs/implementation-plan.md` M7 task 6 is marked deferred to the real launch. No page collecting buyer or seller data may go out to anyone the owner has not personally invited until this is revisited.
 
+### D-042: Frontend design direction ("Key Cabinet", second round)
+- Date: 2026-09-28
+- Status: Accepted
+- Decided by: owner asked for a from-scratch frontend, a loop of ideas, a loop cutting anything generic or AI-default, then refinement. This records the result after the owner rejected the first round as weak on UI and UX.
+- Context: round one made the drawn key the center of the dashboard (every buyer as a tiny key). Reviewed as a real UI it failed: 140 near-identical glyphs cannot be scanned, names needed hover, there was no search or table, and actions were vague. Research inputs: Amber Case's calm technology principles (inform without demanding attention, communicate status without speaking) and published lists of AI-generated design tells (Inter, purple gradients, centered heroes, three identical cards, colored card edges, stat banner rows, all caps labels).
+- Decision: the key stays as the brand mark and a small identity detail, never as a data chart. Screens are plain, fast tools: a status sentence heads the seller home ("4 things need you." or "Everyone who paid can get in."), one de-duplicated "Needs you" list shared by the headline, list, and sidebar badge, a searchable and filterable buyers table that becomes a stacked list on phones, one page per buyer with facts and a plain words history, and buyer pages with one action plus a receipt. State is shown by pill color and shape together (filled dot, ring, triangle, dash, dashed ring) so it reads without color. Everything is left aligned. Type: Schibsted Grotesk for headings, Atkinson Hyperlegible Next for all reading text (built for low vision readers), IBM Plex Mono for ids and times, self hosted through next/font. Palette: nickel grey ground, graphite ink for primary actions, brass only for brand, links, focus, and "you are here"; green, amber, red, and grey reserved for state. Light and dark themes. The landing page leads with a real sale timeline instead of an illustration and shows no pricing numbers, since `product.md` marks them unconfirmed; it says free during the private beta and never a percentage of sales (D-002, D-033).
+- Alternatives: keep the key grid as the dashboard (rejected, see context); a dense spreadsheet-first tool (kept only as the buyers table); dark-first developer styling (rejected as the default AI look for dev tools).
+- Consequences: copy rules are enforced by unit tests (no em dashes, no internal words in buyer copy) and by the Playwright suite (one heading per page, no sideways scroll at 400px, no em dashes in rendered text).
+
+### D-041: Web fixture mode for design review and browser tests
+- Date: 2026-09-28
+- Status: Accepted
+- Decided by: Claude Code
+- Context: every screen needs review at phone and desktop width and Playwright coverage without a running API, GitHub, or payment provider.
+- Decision: `LATCHKEY_WEB_FIXTURES=1` makes the web server answer its own API reads from sample data (example.com emails only) with a fixed clock. `fixturesEnabled` throws `WebConfigurationError` when `NODE_ENV` is production; its test was proven to fail with the guard removed. Playwright's `webServer` starts the web app this way.
+- Alternatives: run the full API and database for UI tests (kept for the existing API e2e test, too slow and coupled for screen coverage); mock `fetch` in the browser (does not cover server rendering).
+- Consequences: fixture data must keep the real API's shape, which the Zod schemas enforce on every fixture read.
+
+### D-040: Frontend rebuild is its own track (W), in Next.js per the stack table
+- Date: 2026-09-28
+- Status: Accepted
+- Decided by: owner asked to rebuild the whole frontend from scratch; Claude Code chose how to track it.
+- Context: the implementation plan has no milestone for a full frontend rebuild, and the owner paused frontend work during M9 and M10. Architecture section 3 already names Next.js (App Router) for web and `apps/web` was an empty placeholder, so no stack change is needed.
+- Decision: track it as W1, W2, and so on, with branches named `w<N>/<short-name>`, under the same rules as milestones. `apps/web` has its own tsconfig (DOM and JSX) and is wired into `pnpm check`: `typecheck` also checks it, `lint` covers `.tsx`, `build` runs `next build`, and `test:e2e` starts it in fixture mode. `next dev`'s generated AGENTS.md and CLAUDE.md are switched off (`agentRules: false`), since the repo root already has its own and the generated text breaks the em dash rule. The API's server-rendered HTML pages stay until the web app is deployed in their place.
+- Alternatives: fold it into M7 or M10 (blurs what those milestones mean); a separate repo (loses shared tests and one `pnpm check`).
+- Consequences: deploying the web app joins the paused Cloudflare work (D-034).
+
 ### D-039: Personal-repo delivery uses the org-move guidance, not repository Administration. Supersedes D-038
 - Date: 2026-09-28
 - Status: Accepted
@@ -370,6 +398,36 @@ Format (newest first):
 - Docs updated:
 - Next step:
 ```
+
+### 2026-09-28: W1 web frontend foundation (design system, buyer pages, seller app, landing)
+- Branch / commits: `w1/web-foundation`, off `main` after PR #6 merged. Also carries the D-039 docs commit, which was pushed to `m9/team-licenses` after PR #6 had already merged and so never reached `main`.
+- Goal: the owner asked for the whole frontend rebuilt from scratch, using a loop of ideas, then a loop cutting generic and AI-default ones, then refinement to a 10 out of 10 standard, then to start building. The first round (a key-cabinet visual concept published as an artifact) was rejected as weak on UI and UX, so this round critiqued real rendered screens, not a mood board.
+- Done:
+  - API for the web app: `GET /me`; JSON on `GET /claim/:token`; the seller license list returns GitHub handle, seat usage, and access state; drift items tied to a grant return the license id and handle.
+  - Two real bugs found while building the screens and fixed with failing tests first: (1) the seller license timeline ignored activity logged against the license's seats and grants, so "invite accepted" and "access removed" never appeared on a buyer's page; (2) the new list's state mapping sent `removed_externally`, `invite_failed`, `inviting`, `invite_expired`, and `removing` to "none", so a buyer removed by hand showed as "Not claimed".
+  - `apps/web` (Next.js 16, React 19): tokens and components (light and dark), landing page, claim page (signed out, signed in, expired, already used, unknown link), access page (status, next step, zip download, install token), purchases across sellers, store creation, seller shell with membership check (404 for other sellers), home (status sentence, compact setup progress, de-duplicated "Needs you", latest sales), buyers (search, filters with counts, table that becomes a list on phones), buyer page (facts, remove or restore with a required reason, history), products, team, not found, and error pages.
+  - Tooling: web app covered by `typecheck`, `lint` (now includes `.tsx`), `build` (`next build`), `test` (18 web unit tests), and `test:e2e` (Playwright starts the web app in fixture mode).
+- Critique rounds on real screens (each item fixed in this change): the key grid could not be scanned and was demoted to brand mark; setup checklist spent five rows on finished steps (now a progress bar plus the next step); a buyer appeared twice on "Needs you" and the headline count disagreed with the list and the sidebar badge (now one shared `needsYou` function); "removed in GitHub by hand" did not say who (now names and links the buyer); "20 buyers" beside "All 22 buyers" read as a mismatch; history dots sat on the panel border; the "Need help?" receipt row was bold; sign out was unreachable on phones; a pre block would have put stray spaces into the copied install command.
+- A button I built and then removed: "Send a fresh invite" for a buyer who needs attention. Reading `packages/core/src/reconcile.ts` showed that restoring a grant already in `needs_attention` plans `needs_attention` again, so the button would have promised an invite that never goes out. Follow-up below.
+- Proof: `pnpm check` result recorded in the PR. Targeted runs during the work: API seller integration suite 9 passed, buyer integration suite 16 passed, web unit tests 18 passed, Playwright web suite 6 passed, web typecheck clean, lint clean. Screens reviewed at 400px and 1440px from screenshots.
+- Negative tests added and how each was proven non-vacuous:
+  - `/me` returns only the signed-in person's sellers: removed the `seller_members.user_id` filter in `getViewer`, test failed, restored, passed.
+  - License timeline includes seat and grant activity and never another license's: reverted to the old query, test failed, restored, passed.
+  - Removed-by-hand maps to needs attention: reverted to the old mapping, test failed, restored, passed.
+  - Fixture mode refuses production: removed the production check, test failed, restored, passed.
+  - Removing access requires a reason and sends nothing without one: removed the empty-reason check, Playwright test failed, restored, passed.
+  - A store you do not belong to is a 404: covered in Playwright (`/s/<other id>` returns 404 and "Nothing here.").
+- Decisions made: D-040 (W track, Next.js per the stack table, tooling), D-041 (fixture mode), D-042 (design direction).
+- Edge cases considered: buyer signs in with the wrong GitHub account (claim page names the signed-in account and offers sign out); expired, used, and unknown claim links each have their own page; buyer with no purchases; seller with no sales; search with no match offers a way back; team licenses show seat usage only when any license has more than one seat; viewers see buyers but not access controls (server still enforces); a buyer page for a license in another store is a 404; long handles and emails wrap instead of overflowing at 400px.
+- Deferred, with reasons:
+  - A real "send a fresh invite" for stuck buyers needs the reconciler to re-plan a `needs_attention` grant when a seller explicitly asks. That changes the access state machine, so it gets its own task and tests rather than riding along with UI work.
+  - The buyer-facing `getBuyerAccess` and `listBuyerPurchases` have the same incomplete state mapping that was fixed for sellers here (a buyer removed by hand sees "Sign in to get your code"). Next task.
+  - The access page offers a zip and an install token without knowing which delivery types the product has; the API should say so. Next task.
+  - Setup steps are shown but not yet linked to setup screens (GitHub connect, provider connect, product and mapping editing). Those screens are W2.
+  - Creating a store with a name already taken returns a server error instead of a clear message; needs a `ConflictError` in `createSeller`.
+  - Deploying the web app waits for Cloudflare (D-034).
+- Docs updated: architecture 11a (web app), `.env.example` (`LATCHKEY_API_ORIGIN`, `LATCHKEY_WEB_FIXTURES`), this file (D-040 to D-042, W1 status row, current state, this entry).
+- Next step: W2, the seller setup screens and product editing, plus the three API follow-ups above.
 
 ### 2026-09-23: M7 fix Secure-cookie bug found in the owner's live sign-in test
 - Branch / commits: `m7/beta-readiness`. Uncommitted.
