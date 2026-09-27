@@ -140,7 +140,7 @@ All seller-owned tables carry `seller_id`. IDs are UUIDv7. Timestamps are `times
 | `auth_states` | One-use OAuth state | `state_hash` primary key, `return_to`, `expires_at`, `created_at` |
 | `github_installations` | GitHub App installed on an org | `installation_id` unique, `seller_id`, numeric account id, account login and type, granted permissions, installed and updated timestamps, suspended and uninstalled timestamps |
 | `provider_connections` | A connected payment provider | `seller_id`, `provider`, `webhook_secret_enc`, `api_key_enc`, `key_version`, `status`, `mode` (test, live) |
-| `products` | What is sold | `seller_id`, `name`, `status` (draft, active, archived), `update_window_days` nullable, `revoke_policy` jsonb |
+| `products` | What is sold | `seller_id`, `name`, `status` (draft, active, archived), `update_window_days` nullable, `revoke_policy` jsonb, `license_type` nullable (M9, free text), `license_terms_template` nullable (M9, free text) |
 | `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: organization and team slug; for registry: organization, repo, and itemName, section 11.1) |
 | `provider_products` | Maps provider product/price IDs to our product | `provider_connection_id`, `external_product_id`, `external_price_id`, `product_id`, `seats` default 1, unique on (connection, external ids) |
 | `licenses` | One purchase or subscription | `seller_id`, `product_id`, `status`, `kind` (one_time, subscription), `seats_total`, `purchased_at`, `updates_until` nullable, `purchase_email`, `manager_user_id` nullable, `status_reason` |
@@ -157,6 +157,7 @@ All seller-owned tables carry `seller_id`. IDs are UUIDv7. Timestamps are `times
 | `artifact_versions` | Immutable built registry/download versions | `deliverable_id`, `version` (tag), `released_at`, `s3_key`, `sha256`; unique on (deliverable, version) |
 | `api_tokens` | Buyer registry tokens | `license_id`, `seat_id`, `token_hash` unique, `prefix`, `last_used_at`, `revoked_at` |
 | `email_log` | Emails sent | `to`, `template`, `dedupe_key` unique, `provider_message_id`, `status` |
+| `seat_username_invites` | M9: a manager inviting a teammate by GitHub username, resolved in the worker | `license_id`, `login`, `requested_by`, `status` (pending, resolved, failed), `error_reason` nullable, `created_at`, `resolved_at` nullable |
 | `audit_log` | Security-relevant actions | who, what, ip, when; append-only |
 
 **Rules**
@@ -281,6 +282,15 @@ Rules:
 
 Claim rules: token is 32 random bytes, hashed at rest, valid 30 days, reusable only for unassigned seats of that license, re-sendable by seller or buyer (to purchase email only). Single-seat licenses become unusable once assigned; reassigning needs seller action or the seat manager.
 
+### 7.2a Team licenses (M9)
+
+- The first person to claim any seat on a license becomes its `manager_user_id`. A later claimant never displaces them. Every manager-only action (`packages/db/src/seats.ts`) resolves the license by `manager_user_id = callingUser`, so a license that is not this user's own is a 404, never a 403, the same tenant-isolation shape used everywhere else (invariant 6).
+- `SeatsChanged` (from the provider's own quantity, or a synthetic event a seller triggers) changes `seats_total`: raising it creates open seat rows immediately; lowering it never removes anyone. If more people are already assigned than the new total allows, a `seats_reduced_below_assigned` drift item records it, and the manager or seller has to choose who releases their seat; nothing is auto-removed. Applying the change is gated on the event having just been newly stored, not on every re-fold a later, unrelated event triggers, so replaying an old (already superseded) event through the replay-events runbook can never resurrect a stale seat count.
+- The manager invites a teammate to an open seat two ways: a claim link (same `claims` table as the original purchase claim, any open seat), or directly by GitHub username. A username invite is a real GitHub call (`resolveUserByLogin`), so it runs in the worker (`resolve_seat_username_invite`), never inline in the HTTP handler (invariant 5); a login GitHub does not recognize fails the invite with a clear reason instead of throwing, since it is not a system fault.
+- **The re-invite race:** an "open" seat (`user_id IS NULL`) is only actually available once every grant tied to it has settled to `observed IN ('none', 'removed')`. `desiredGrants` re-derives `desired` from a seat's *current* assignment on every fold, with no memory of who held it before; assigning a new person to a seat before the old removal is GitHub-confirmed would let the reconciler see `desired = "present"` without ever having seen `"absent"` in between, silently leaving the old person's access in place. `openSettledSeat` enforces this before either invite path can use a seat.
+- Releasing a seat (`releaseManagedSeat`) works the same as the buyer's own 24-hour self-release, minus the "not already active" restriction self-release needs: `desired = "absent"`, reconciler does the actual GitHub removal.
+- `products.license_type` and `products.license_terms_template` are free-text fields a seller sets to describe what a seat means for that product; no enforcement, purely descriptive.
+
 ### 7.3 Refund, chargeback, subscription end
 
 Event arrives, license refolds to `refunded` / `charged_back` / `ended`, desired grants become `absent`, reconciler removes, activity log records the reason. Seller and buyer are notified per templates (buyer message is neutral, never accusatory).
@@ -351,6 +361,7 @@ Used for: installation on seller orgs, seller login, buyer login.
 | Members (organization) | Read and write | Team membership, org invitations, removing members we added |
 | Metadata (repository) | GitHub baseline | No repository selection is requested for M3 |
 | Contents (repository) | Read-only | M8: fetch a release tag's files to build registry item JSON. Added by D-037, after M3's original scope. |
+| Administration (repository) | Read and write | M10: manage collaborators directly on a personal (non-organization) repo, which has no teams. Added by D-038. Also grants rename/delete/settings, unused, but not separable from collaborator management on GitHub's side. |
 
 **Webhook events subscribed:** `installation` and `installation_repositories` arrive for every GitHub App. The deployed App also subscribes to `organization`, `membership`, and `team`. `release` was added for M8 (D-037).
 
