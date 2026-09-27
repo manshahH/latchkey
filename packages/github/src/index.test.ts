@@ -61,3 +61,17 @@ test("fake github resolves a set login to its numeric id, and null for an unknow
   github.deleteUser(7n);
   expect(github.resolveUserByLogin("octocat")).toBeNull();
 });
+
+test("fake github serves a set repository zip and returns null when unset, sharing failure injection with file fetches", () => {
+  const github = new FakeGitHub();
+  const repoTarget = { organization: "seller-org", repo: "widget-kit" };
+  const zip = new Uint8Array([1, 2, 3]);
+  github.setRepositoryZip(repoTarget, "v1.0.0", zip);
+
+  expect(github.getRepositoryZip(repoTarget, "v1.0.0")).toEqual(zip);
+  expect(github.getRepositoryZip(repoTarget, "v2.0.0")).toBeNull();
+
+  github.failNextRepositoryFile("server_error");
+  expect(() => github.getRepositoryZip(repoTarget, "v1.0.0")).toThrow("temporarily unavailable");
+  expect(github.getRepositoryZip(repoTarget, "v1.0.0")).toEqual(zip);
+});
