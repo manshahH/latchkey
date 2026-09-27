@@ -10,6 +10,7 @@ test("declares the bootstrap, events, GitHub App, provider-secret, buyer-claim, 
     "0004_buyer_claims",
     "0005_exports",
     "0006_billing",
-    "0007_registry_tokens"
+    "0007_registry_tokens",
+    "0008_team_licenses"
   ]);
 });
