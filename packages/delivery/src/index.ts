@@ -3,7 +3,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export interface ExportStorage {
-  put(input: { body: string; contentType: string; key: string }): Promise<void>;
+  put(input: { body: string | Uint8Array; contentType: string; key: string }): Promise<void>;
   signedDownloadUrl(key: string, expiresInSeconds: number): Promise<string>;
 }
 export interface R2ExportConfig {
@@ -90,8 +90,8 @@ export class MemoryArtifactStorage implements ArtifactStorage {
 }
 
 export class MemoryExportStorage implements ExportStorage {
-  readonly objects = new Map<string, { body: string; contentType: string }>();
-  put(input: { body: string; contentType: string; key: string }): Promise<void> {
+  readonly objects = new Map<string, { body: string | Uint8Array; contentType: string }>();
+  put(input: { body: string | Uint8Array; contentType: string; key: string }): Promise<void> {
     this.objects.set(input.key, { body: input.body, contentType: input.contentType });
     return Promise.resolve();
   }
