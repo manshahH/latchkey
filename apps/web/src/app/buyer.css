@@ -1,0 +1,233 @@
+/* Buyer pages: built for a phone first, one decision per screen. */
+.buyer-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.buyer-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 60px;
+}
+.buyer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 560px) minmax(0, 340px);
+  gap: clamp(28px, 6vw, 88px);
+  align-items: start;
+  padding-block: clamp(28px, 6vw, 72px) 72px;
+}
+.buyer-action {
+  min-width: 0;
+}
+.buyer-title {
+  font-size: clamp(1.75rem, 1.35rem + 1.6vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.024em;
+  line-height: 1.08;
+}
+.buyer-lede {
+  font-size: var(--text-lg);
+  max-width: 46ch;
+}
+.buyer-cta {
+  justify-self: start;
+  min-width: min(100%, 300px);
+}
+.ink {
+  color: var(--ink);
+}
+.form-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.link-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--brand-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.steps-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  display: inline-grid;
+  place-items: center;
+}
+.steps li[data-state="done"] {
+  color: var(--ink-2);
+}
+.steps li[data-state="done"] .steps-mark {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.steps li[data-state="done"] .steps-mark::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid var(--on-ink);
+  border-bottom: 2px solid var(--on-ink);
+  rotate: -45deg;
+  translate: 0 -1px;
+}
+.steps li[data-state="current"] {
+  color: var(--ink);
+}
+.steps li[data-state="current"] .steps-mark {
+  border: 5px solid var(--brand);
+}
+
+.receipt {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+.receipt-title {
+  font-size: var(--text-md);
+  color: var(--ink-3);
+  font-family: var(--font-body), sans-serif;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.receipt dl {
+  margin: 0;
+  display: grid;
+}
+.receipt dl div {
+  display: grid;
+  gap: 2px;
+  padding-block: 10px;
+  border-top: 1px dashed var(--line-strong);
+}
+.receipt dt {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.receipt dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.receipt dd.plain {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.more-ways {
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.more-ways-title {
+  font-size: var(--text-lg);
+}
+.way {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.way h3 {
+  font-size: var(--text-md);
+}
+.way .btn {
+  justify-self: start;
+}
+.token-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.token {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.group-title {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  font-family: var(--font-body), sans-serif;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.purchase-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.purchase-list li + li {
+  border-top: 1px solid var(--line);
+}
+.purchase {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  text-decoration: none;
+  min-height: 60px;
+}
+.purchase:hover {
+  background: var(--surface-2);
+}
+.purchase-name {
+  font-weight: 600;
+  font-size: var(--text-lg);
+}
+.purchase-arrow {
+  color: var(--ink-3);
+}
+
+@media (max-width: 860px) {
+  .buyer-main {
+    grid-template-columns: 1fr;
+  }
+  .buyer-cta {
+    width: 100%;
+  }
+}
+@media (max-width: 480px) {
+  .purchase {
+    grid-template-columns: 1fr auto;
+  }
+  .purchase .pill {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .purchase-arrow {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+}
