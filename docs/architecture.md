@@ -350,12 +350,13 @@ Used for: installation on seller orgs, seller login, buyer login.
 |---|---|---|
 | Members (organization) | Read and write | Team membership, org invitations, removing members we added |
 | Metadata (repository) | GitHub baseline | No repository selection is requested for M3 |
+| Contents (repository) | Read-only | M8: fetch a release tag's files to build registry item JSON. Added by D-037, after M3's original scope. |
 
-**Webhook events subscribed:** `installation` and `installation_repositories` arrive for every GitHub App. The deployed App also subscribes to `organization`, `membership`, and `team`. `release` remains next phase.
+**Webhook events subscribed:** `installation` and `installation_repositories` arrive for every GitHub App. The deployed App also subscribes to `organization`, `membership`, and `team`. `release` was added for M8 (D-037).
 
 **User authorization:** only for identity (numeric user id, login, verified primary email if granted). No repo scopes for users.
 
-M3 deliberately does not request Organization Administration or repository Contents. Plan and private-forking checks return unavailable until a later owner-approved permission change. Any permission change is a decision entry and requires owner approval, because it forces every seller to re-approve.
+M3 deliberately did not request Organization Administration or repository Contents. Plan and private-forking checks return unavailable until a later owner-approved permission change. Contents was added by D-037 for M8; Organization Administration is still not requested. Any permission change is a decision entry and requires owner approval, because it forces every seller to re-approve.
 
 ### 8.2 Endpoints we expect to use (verify before coding)
 

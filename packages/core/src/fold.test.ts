@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultRevokePolicy,
   foldLicense,
+  RevokePolicySchema,
   type LicenseEvent,
   LicenseEventSchema
 } from "./index.js";
@@ -109,6 +110,31 @@ describe("foldLicense", () => {
       access: "present",
       status: "active"
     });
+  });
+
+  it("a lost dispute removes access even under a policy that keeps access while a dispute is open (invariant 12)", () => {
+    const keepsAccessWhileDisputed = RevokePolicySchema.parse({ dispute_opened: "keep" });
+    const disputeLost = LicenseEventSchema.parse({
+      data: { outcome: "lost" },
+      id: "dispute-lost",
+      occurredAt: dateAt(3),
+      receivedAt: dateAt(3),
+      type: "DisputeResolved"
+    });
+
+    const stillDisputed = foldLicense(
+      [payment(), event("DisputeOpened", 2)],
+      keepsAccessWhileDisputed,
+      dateAt(3)
+    );
+    expect(stillDisputed).toEqual({ access: "present", status: "disputed" });
+
+    const afterLoss = foldLicense(
+      [payment(), event("DisputeOpened", 2), disputeLost],
+      keepsAccessWhileDisputed,
+      dateAt(4)
+    );
+    expect(afterLoss).toEqual({ access: "absent", status: "charged_back" });
   });
 
   it("does not restore access when a dispute is won by default", () => {

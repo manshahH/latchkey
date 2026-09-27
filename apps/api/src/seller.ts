@@ -79,12 +79,6 @@ export const createSellerApi = ({ sql, now, exportStorage }: SellerApiOptions) =
     await requireSellerRole(sql, sellerId, user, "viewer");
     return c.json(await getSellerPlanUsage(sql, sellerId, now()));
   });
-  app.get("/sellers/:sellerId/billing", async (c) => {
-    const user = await session(c);
-    const sellerId = id.parse(c.req.param("sellerId"));
-    await requireSellerRole(sql, sellerId, user, "viewer");
-    return c.json(await getSellerPlanUsage(sql, sellerId, now()));
-  });
   app.get("/sellers/:sellerId/banners", async (c) => {
     const user = await session(c);
     const sellerId = id.parse(c.req.param("sellerId"));

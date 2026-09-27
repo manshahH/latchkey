@@ -17,8 +17,8 @@
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
 | M6 Seller dashboard | DONE | 2026-09-21 | 2026-09-22 | Sandbox purchase/refund webhooks, GitHub access and safe team/org revocation verified; temporary provider resources removed; `pnpm check` passed. |
-| M7 Beta readiness | IN PROGRESS | 2026-09-22 | | Free-beta billing switch done. Running locally against Supabase staging until Cloudflare hosting is funded (D-034). Live beta proof remains required. |
-| M8 Registry delivery | NOT STARTED | | | |
+| M7 Beta readiness | IN PROGRESS, deployment paused | 2026-09-22 | | Everything buildable locally is done (see the M7 remaining-work list below). Cloudflare deployment deliberately paused until the owner is ready (D-034); resume there, do not start M8's registry deploy pipeline as a substitute. |
+| M8 Registry delivery | IN PROGRESS | 2026-09-27 | | Started. Task 1 (Request Contents: read GitHub App permission) needs owner approval before any code that reads repository contents. |
 | M9 Team licenses | NOT STARTED | | | |
 | M10 Later phase | NOT PLANNED | | | Plan after beta feedback |
 
@@ -28,11 +28,23 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 
 ## 2. Current state (update at the end of every session)
 
-**Last updated:** 2026-09-23
-**Branch in progress:** `m7/beta-readiness`.
-**What exists:** M0 through M6 are complete. M7 now has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence, verified platform Paddle webhooks, plan-usage prompts, and required operator runbooks. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain the available database, GitHub App, R2, encryption, and session values.
-**Next action:** owner confirmed GitHub sign-in works locally. Next is a local sandbox purchase and claim, so the owner sees their own product show up under "My purchases". Platform billing is off (D-033) and no longer required.
-**Open blockers:** Cloudflare Workers Paid plan (owner will fund later, D-034) for webhooks, deploy, restore drill, alarm test, and 72-hour soak; a sending domain for Resend before real buyers get email; owner-provided legal text; final owner beta approval.
+**Last updated:** 2026-09-27
+**Branch in progress:** `main` (this session's work was small and self-contained; done directly rather than on a new feature branch).
+**What exists:** M0 through M6 are complete. M7 has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence (off by default, D-033), plan-usage evaluation, required operator runbooks, a verified invariant-to-test table, and a passed dependency/secrets security pass. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain every value the local stack needs. A full sandbox purchase, an unmapped-product reprocess, a claim, and a real Resend email delivery have all been proven against the live local API and worker running on the owner's machine.
+**Next action:** nothing further is buildable locally for M7. What remains needs either the owner's Cloudflare Workers Paid plan (D-034, deliberately deferred by the owner) or legal text before the real public launch (D-035, also deferred).
+**Open blockers:** Cloudflare Workers Paid plan for webhooks, deploy, restore drill, alarm test, and 72-hour soak; auth/claim/resend rate limiting, which is Cloudflare Rate Limiting rules configured at deploy time (D-036); a sending domain for Resend before real buyers (not just the owner) get email; legal text before the real public launch (not the private beta, D-035); final owner beta approval.
+**M7 remaining work (all paused, owner said leave deployment for now):**
+1. Fund and configure the Cloudflare Workers Paid plan, then follow `docs/m7-supabase-cloudflare-setup.md` to upload secrets, dry-run validate, and deploy staging from `main`.
+2. Point the GitHub App webhook and OAuth callback at the real staging URL once it exists.
+3. Confirm `/healthz`, one signed GitHub webhook, and one signed sandbox purchase/refund against the deployed staging environment (the local proof from 2026-09-23 and 2026-09-27 does not substitute for this, since GitHub cannot reach a local machine).
+4. Configure Cloudflare Rate Limiting rules for auth, claim, and resend (D-036).
+5. Restore-from-backup drill on staging, timed in the log.
+6. Alarm test: force a signature-failure spike and confirm the alarm fires.
+7. 72-hour staging soak: synthetic purchases, refunds, disputes, renames, uninstalls, and GitHub error injection on a schedule; log a report with counts and zero stuck grants older than 1 hour past their next attempt.
+8. A verified Resend sending domain, before real buyers (not just the owner) get email.
+9. Owner-provided legal text (Terms, Privacy Policy, data processing notes), required before the real public launch, not before this private beta (D-035).
+10. Owner's final beta approval: the owner reviews the soak report, restore drill, and alarm test, then decides real sellers can be invited (`docs/implementation-plan.md`'s M7 beta gate).
+
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -240,6 +252,33 @@ Format:
 - Decision: Latchkey does not collect its own subscription payments, require a commercial plan, or require platform Paddle prices or a platform billing webhook during private beta. Sellers continue to use their own payment providers for their products.
 - Alternatives: require the planned Paddle subscription setup now, which would slow the beta and add a payment dependency before it is useful.
 - Consequences: hosted runtime and Cloudflare deployment configuration must make platform billing optional or disabled by default. Existing billing code and migrations remain dormant until a future owner-approved launch.
+### D-035: Legal pages wait for real launch, not the private beta
+- Date: 2026-09-27
+- Status: Accepted
+- Decided by: owner
+- Context: `docs/implementation-plan.md` lists Terms, Privacy Policy, and data processing notes as an M7 task, owner-provided text with the agent adding the pages. The owner does not have that text ready and wants to keep moving on the private beta.
+- Decision: legal pages are required before the real, public launch, not before a private beta with people the owner invites directly. The M7 beta gate (owner approval before real sellers are invited) does not wait on them.
+- Alternatives: block all further beta progress until legal text exists (stalls the beta with no real users yet); publish placeholder legal text now (worse than no page, and not the owner's to decide alone under section 10).
+- Consequences: `docs/implementation-plan.md` M7 task 6 is marked deferred to the real launch. No page collecting buyer or seller data may go out to anyone the owner has not personally invited until this is revisited.
+
+### D-037: Add Contents (repository, read) and the release webhook for M8
+- Date: 2026-09-27
+- Status: Accepted
+- Decided by: owner
+- Context: M8 (registry delivery) needs the GitHub App to read a seller's repository contents (to fetch release tags and build registry item JSON) and to receive `release` webhook events. `architecture.md` section 8.1 says M3 deliberately did not request this, and any permission change is a decision entry requiring owner approval, since existing installations must re-approve. The owner was asked directly, with the trade-off that a live change is low risk right now because there are no real sellers yet to disrupt.
+- Decision: add `Contents: Read-only` (repository permission) and subscribe to the `release` webhook event on the same GitHub App used for staging and testing. Approved now, before any real sellers exist, rather than waiting until after the beta launches.
+- Alternatives: wait until after the private beta has real sellers (avoids ever asking anyone to re-approve, but blocks M8 entirely until then); build only the parts of M8 that do not need this permission and pause the rest (kept as a fallback if the owner had said no; not needed since the owner approved).
+- Consequences: `docs/architecture.md` section 8.1 updated. The owner must add the permission and webhook event in the GitHub App's own settings page (Claude Code cannot change a GitHub App's permission scopes through the API; only the app's manager can, in GitHub's UI). M8 code that reads repository contents cannot be live-tested until that is done, but can be built and tested against `FakeGitHub` in the meantime, the same pattern used throughout M1 through M7. This also means M8 starts before the M7 beta gate, ahead of the implementation plan's original "Private beta starts after M7. M8 onward is shaped by beta feedback" ordering; the owner chose to move on to M8 while M7's deployment is paused, so recording this explicitly here to avoid confusion later about why M8 has work before M7's beta gate closed.
+
+### D-036: Rate limiting for auth, claim, and resend waits for the Cloudflare deploy
+- Date: 2026-09-27
+- Status: Accepted
+- Decided by: agent
+- Context: `docs/implementation-plan.md` M7 task 5 asks for rate limits on auth, claim, resend, and registry. The registry does not exist yet (M8). The owner asked to leave Cloudflare deployment for the end (D-034). Cloudflare Rate Limiting rules are the natural home for this (configured per route at the edge, no application code, covers every route including ones added later) and only exist once the app is actually behind Cloudflare.
+- Decision: defer the auth, claim, and resend rate limits to the Cloudflare deployment step, as Cloudflare Rate Limiting rules rather than in-app code. Building a bespoke in-app limiter now (a per-IP token bucket, likely backed by Postgres or in-memory state that would not even survive across Cloudflare Container instances) would be thrown away at deploy time.
+- Alternatives: an in-app limiter now (real, working protection sooner, but the wrong shape for the eventual Cloudflare Workers/Containers runtime, and duplicate work); wait and do nothing until asked (loses the record of why it is missing).
+- Consequences: these three routes have no rate limiting during local-only testing. Low real risk right now (nothing is reachable from the internet per D-034), but this must be configured before the Cloudflare deploy, not after. Added to the M7 acceptance checklist below.
+
 ### D-031: Encode CSV exports as typed records
 - Date: 2026-09-22
 - Status: Accepted
@@ -325,6 +364,63 @@ Format (newest first):
 - Not done / deferred: the owner still needs to click through the real GitHub OAuth consent screen in a browser; I could not do that from here since it needs the owner's GitHub login. Everything else from the previous entry (Cloudflare hosting, webhooks, soak) is still waiting on D-034.
 - Docs updated: architecture section 13, `m7-supabase-cloudflare-setup.md`, this work log.
 - Next step: owner retries GitHub sign-in at `http://localhost:8080/auth/github?returnTo=/purchases` with the restarted server.
+### 2026-09-27: M7 remaining-work list, pause deployment, start M8
+- Branch / commits: `m7/security-pass-and-sandbox-proof` (continuing PR #2, not yet merged).
+- Goal: the owner asked to write down what is left on M7 in one place, leave Cloudflare deployment paused for now, and move on to the next milestone.
+- Done: added a numbered M7 remaining-work list to the current state section (the ten items that need either Cloudflare hosting, a sending domain, or owner-provided legal text, in the order the M7 plan expects them). Set the status board to make clear M7 is paused on deployment by the owner's choice, not blocked or abandoned, and that M8 has started.
+- Decisions made: none new.
+- Not done / deferred: everything in the new M7 list, by the owner's own instruction.
+- Docs updated: status board, current state (this entry).
+- Next step: M8. Task 1 (`Request Contents: read` GitHub App permission) needs owner approval before any code reads repository contents, per `CLAUDE.md`'s stop-and-ask list ("Changing GitHub App permissions"). Asking now.
+
+### 2026-09-27: M7 local sandbox purchase, claim, and email proof
+- Branch / commits: `main`. Uncommitted at time of writing.
+- Goal: drive a real sandbox purchase end to end through the actually-running API and worker processes (not the test harness) against Supabase staging, so the owner sees their own product show up under "My purchases", and confirm the Resend email pipeline works live for the first time.
+- Setup: created a seller owned by the owner's own real signed-in user (the same GitHub account is both buyer and seller here, the documented "seller testing their own product" edge case), a test-mode provider connection, a product, and a `github_team` deliverable pointing at a deliberately fake organization and team so nothing in this test could touch a real GitHub organization.
+- Sent three signed `test` provider webhooks to the live local API (not `enqueueWebhookEvent` in a test file, the real `POST /webhooks/test/:connectionId` route). The first one landed on `unmapped_product`, exactly as designed: `docs/runbooks/reprocess-unmapped-product.md` was followed for real, a `provider_products` mapping row was added, and the event was replayed by resetting `processed_at`/`process_error` and re-enqueueing `process_event` with the same event id, which produced one license.
+- Found while doing that replay manually: calling `enqueueJob` (the real function `packages/db/src/repositories.ts` exports and the whole job pipeline depends on) on a bare, freshly-opened connection against the Supabase session pooler stores a double-encoded payload (a JSON string containing JSON text, instead of an object), and the task then fails with a Zod "expected object, received string" error. Reproduced 3 times in a row on fresh connections. This looked like a serious bug at first. Investigated: every real call site in the app either runs inside a `sql.begin()` transaction, or runs on the API/worker's own long-lived connection, never a short-lived ad hoc one. Confirmed by triggering fresh webhooks through the real running server: `enqueueJob` calls both inside transactions (`process_event`, via `enqueueWebhookEvent`) and outside one on the long-lived connection (`notify_buyer`/`notify_seller` inside `recordAttentionAndNotify`) both worked correctly. Concluded this is a Supabase pooler quirk specific to a brand new, disposable connection's first parameterized call, not a bug in the deployed app, which only ever uses long-lived connections. Recorded here so it is not mistaken for a real bug again, and so any future one-off script against staging builds its JSON payload inside the SQL (`jsonb_build_object(...)::json`) instead of passing a pre-stringified parameter on a fresh connection.
+- The second and third webhooks went through cleanly the first time (mapping already existed): each produced one license, one hashed claim, and one reserved, deduplicated `claim_link` email.
+- Resend proof: the first two email attempts failed with a real Resend 403 ("You can only send testing emails to your own email address"), which was useful: it revealed the Resend account's verified test address is `manshahhussain.b8@gmail.com`, not the account email the owner signs in with. A third webhook using that address produced a job that completed successfully (no thrown error), and a direct Resend API call with the same `from`/`to` confirmed a real 200 and message id, live email delivery, for the first time this project has actually exercised it.
+- Completed one claim for real over HTTP: created one claim token and a buyer session for the owner's real user id directly in the database (the same pattern `apps/api/src/buyer.integration.test.ts` uses), then drove `GET /claim/:token`, `POST /buyer/claims/:token` (with the CSRF header), and `GET /purchases` against the live server with that session cookie. `POST /buyer/claims/:token` returned `{"licenseId":"..."}`, and `GET /purchases` rendered "Sandbox Starter Kit: Access is on its way. We will keep checking GitHub."
+- Confirmed the honest failure path too: `GET /access/:licenseId` for that same license reads "We need help to finish your access. Contact the seller and include your purchase email." because the deliverable points at a GitHub organization that does not exist. The seller's drift list shows why in plain terms ("GitHub installation is not linked to this seller", "Buyer has no GitHub identity" for the two unclaimed licenses), and `GET /sellers/:id/billing` correctly reports `activeBuyerCount: 3`, `state: "within_limit"` against the free plan's limit of 10.
+- Observed, not fixed (out of scope, noted for later): `email_log.status` is written once as `"reserved"` and never updated to a sent or failed state anywhere in the codebase, and `email_log.provider_message_id` is never populated even though the column exists. There is currently no way to tell from our own database whether a reserved email actually reached Resend. Not a correctness bug (dedup still works correctly either way), but worth a small follow-up before relying on it operationally.
+- Proof: HTTP status codes and response bodies for every step recorded above, drift items and billing state read back from the live database, one real Resend delivery confirmed with a message id.
+- Not done / deferred: nothing further for this specific test. The sandbox seller and its three licenses were left in the Supabase staging database (harmless synthetic data, useful for further local testing); a full reset before the real soak is already expected per the M7 plan.
+- Docs updated: this work log entry, status board, current state.
+- Next step: none required to reach the owner's requested stopping point (everything short of the deferred deployment, legal pages, and rate limiting). Waiting on the owner for the Cloudflare plan and, later, legal text.
+
+### 2026-09-27: M7 security pass and invariant-to-test table
+- Branch / commits: `main` (working directly, small self-contained changes; no feature branch needed for a review-and-fix pass this size).
+- Goal: the owner said to leave Cloudflare deployment and legal pages for the end, and to complete the rest of M7 that can be done locally: the M7 task 5 security pass (dependency audit, secrets scan, invariant-to-test table) and a local sandbox purchase/claim proof.
+- Decisions made: D-035 (legal pages wait for the real launch, not the private beta), D-036 (auth/claim/resend rate limiting waits for the Cloudflare deploy, as Cloudflare Rate Limiting rules instead of in-app code, since the registry those rules also cover does not exist yet and an in-app limiter would be thrown away at deploy time).
+- Dependency audit: `pnpm audit --prod` found one high (Drizzle ORM SQL injection via unescaped identifiers, path `packages__db>drizzle-orm`) and one moderate (`uuid` buffer bounds check, path `packages__testing>...>dockerode>uuid`). Checked actual exposure before fixing: `drizzle-orm`'s query builder (the vulnerable code path) is never called anywhere in the codebase, only its schema types and the `postgres-js` adapter are used, and every real query goes through `postgres`'s own parameterized tagged templates. Bumped `drizzle-orm` to `^0.45.3` anyway (small semver-compatible fix, no functional change, `tsc` and the affected package's tests still pass). The `uuid` finding is inside `@latchkey/testing`, a devDependency only (checked all three of its consumers), used for Testcontainers in integration tests, never imported by the deployed API or worker code. Real risk is low but not zero, since the current `Dockerfile` runs a plain `pnpm install` without `--prod` and so still installs it into the image; left as is because slimming the Docker install is deployment work the owner asked to defer, and noted here so it is not forgotten before the real deploy.
+- Secrets scan: `git ls-files` searched for private key headers, AWS/GitHub token prefixes, and embedded Postgres credentials. Three matches, all safe: `.env.example` and `drizzle.config.ts` use the standard local `latchkey:latchkey@127.0.0.1` docker-compose password, and `packages/config/src/index.test.ts` uses the same fixture value in a test. Checked the full Git history too (`git log --all -p` for `.env`/`.pem`/`.key` files, and `git log --all --diff-filter=A --name-only` for `.dev.vars.staging`/`.dev.vars.production`): none were ever added.
+- Found and fixed a small bug while reviewing the billing endpoint: `GET /sellers/:sellerId/billing` was registered twice, identically, in `apps/api/src/seller.ts`. The second copy was dead code (Hono matches the first registration). Removed it.
+- Found and fixed a real test-coverage gap against invariant 12 (a lost dispute never auto-restores access): the only existing dispute test named itself around a won dispute. The code's handling of a lost dispute (`packages/core/src/fold.ts`, the `outcome === "lost"` branch) was exercised by an existing table-driven test but only checked the `status` field, not `access`, and under a policy where disputes are revoked anyway by default, so it could not show the invariant actually holds. Added a named test that opens a dispute under a policy that would otherwise keep access while a dispute is open, confirms access is still present at that point, then resolves the dispute as lost and confirms access is now absent, proving the loss overrides the keep-access policy rather than merely restating the default.
+- Proof: `pnpm test packages/core/src/fold.test.ts` 15 passed. Non-vacuous: forced the `outcome === "lost"` branch to never trigger (`if (false)`), both the new test and the existing "returns charged_back for its documented status row" test failed as expected; restored, both pass.
+- Invariant-to-test table (M7 acceptance criterion: every invariant in CLAUDE.md maps to at least one named test). Verified each file and test name below actually exists and asserts what it claims, by reading the test, not by trusting the earlier `docs/m7-security-gates.md` draft (which listed some file names correctly but did not check exact test names):
+
+| # | Invariant | File | Test |
+|---|---|---|---|
+| 1 | Never touch money | `packages/core/src/billing.test.ts` | plan-usage evaluation only; no payment capture code exists anywhere in the repo (checked by search) |
+| 2 | Never remove someone we did not add | `packages/core/src/reconcile.test.ts` | "only removes an org member after every provenance safety condition passes", "never removes an org member without safe provenance inputs", "does not touch an invitation that was not created by us" |
+| 3 | Unverified input never changes state | `apps/api/src/index.test.ts` | "rejects unverified webhooks without changing state", "rejects a bad GitHub webhook signature without storing a delivery" |
+| 3 | Unverified input never changes state (platform billing) | `apps/api/src/billing.test.ts` | "rejects an invalid platform-billing signature without changing plan state" |
+| 4 | Every event is processed effectively once | `apps/worker/src/events.integration.test.ts` | "five duplicate webhooks produce one external event, license, and GitHub invite through Graphile tasks", "a crash after the GitHub call retries without a duplicate invite" |
+| 5 | Access changes go through desired state and the reconciler | `packages/core/src/reconcile.test.ts` | "plans the smallest present-access action for every observed state class" |
+| 6 | Tenant isolation | `apps/api/src/seller.integration.test.ts` | "seller B cannot read or export seller A while seller A can" |
+| 7 | Identity is the GitHub numeric id | `apps/worker/src/github.integration.test.ts` | "renamed users remain reconcilable because grants use numeric GitHub identity" |
+| 8 | Secrets encrypted at rest, never logged, never sent to a browser | `packages/logging/src/index.test.ts` | "redacts secrets before writing a log entry" |
+| 9 | Read-only by default | `packages/core/src/reconcile.test.ts` | "plans the smallest present-access action for every observed state class" (never plans a write grant without explicit seller opt-in, covered by the property test above it) |
+| 10 | Access never changes silently | `apps/api/src/seller.integration.test.ts` | "viewer cannot revoke while an admin can, and the rejected call changes no grant" (asserts the activity row alongside the permission check) |
+| 11 | Sellers can always export their data | `apps/worker/src/events.integration.test.ts` | "queued export round-trips every seller record into private object storage" |
+| 12 | A lost dispute never auto-restores access | `packages/core/src/fold.test.ts` | "a lost dispute removes access even under a policy that keeps access while a dispute is open (invariant 12)" (new, added this session) |
+
+- Edge cases considered: the audit and secrets scan cover the whole repository, not just this session's diff, since M7's security pass is a full review, not an incremental one.
+- Not done / deferred: Cloudflare deployment, legal pages (D-035), and edge rate limiting (D-036), all per the owner's instruction to leave deployment for the end. A local sandbox purchase and claim test follows this entry.
+- Docs updated: `docs/implementation-plan.md` (M7 tasks 5 and 6 reference the new decisions), this work log (decisions, invariant table, status board, current state).
+- Next step: local sandbox purchase and claim test.
+
 ### 2026-09-23: M7 fix a second, deeper bug: only one Set-Cookie header ever reached the browser
 - Branch / commits: `m7/beta-readiness`. Uncommitted.
 - Goal: the Secure-cookie fix restarted, and the owner still got "Please sign in with GitHub to continue." immediately after approving on GitHub, in a fresh incognito window, twice.
