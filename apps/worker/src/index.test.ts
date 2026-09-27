@@ -12,6 +12,7 @@ test("worker exposes the Graphile M2, M3, and M8 task identifiers", () => {
     now: () => new Date("2026-01-01T00:00:00Z")
   });
   expect(Object.keys(tasks).sort()).toEqual([
+    "build_download_artifact",
     "build_registry_artifacts",
     "generate_export",
     "invite_watchdog",

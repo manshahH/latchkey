@@ -7,6 +7,7 @@ import type { ArtifactStorage, ExportStorage } from "@latchkey/delivery";
 import type { GitHubClient } from "@latchkey/github";
 import {
   artifactVersionExists,
+  getDownloadDeliverableConfig,
   getPendingSeatUsernameInvite,
   getPendingSellerExport,
   getRegistryDeliverableConfig,
@@ -179,6 +180,35 @@ export const createTaskList = ({
       releasedAt: now(),
       s3Key: key,
       sha256: createHash("sha256").update(body).digest("hex"),
+      version: tag
+    });
+  },
+  build_download_artifact: async (payload) => {
+    const job = JobPayloadSchema.parse(payload);
+    const deliverableId = job.deliverableId ?? "";
+    const organization = job.organization ?? "";
+    const repo = job.repo ?? "";
+    const tag = job.tag ?? "";
+    const config = await getDownloadDeliverableConfig(sql, deliverableId);
+    // The deliverable was deleted or changed type since this job was enqueued. Nothing to build.
+    if (config === null) return;
+    // Immutable: never re-fetch or re-write an already-recorded version.
+    if (await artifactVersionExists(sql, deliverableId, tag)) return;
+    const zip = await github.getRepositoryZip({ organization, repo }, tag);
+    if (zip === null) {
+      await recordArtifactDrift(sql, config.sellerId, "download_zip_missing", {
+        deliverableId,
+        tag
+      });
+      return;
+    }
+    const key = `downloads/${deliverableId}/${tag}.zip`;
+    await exportStorage.put({ body: zip, contentType: "application/zip", key });
+    await storeArtifactVersion(sql, {
+      deliverableId,
+      releasedAt: now(),
+      s3Key: key,
+      sha256: createHash("sha256").update(zip).digest("hex"),
       version: tag
     });
   },
