@@ -22,6 +22,7 @@ import {
   resolveSellerDrift,
   sellerLicenseTimeline,
   setManualAccess,
+  setProductLicenseTerms,
   setSellerMemberRole
 } from "@latchkey/db";
 import type { Sql } from "postgres";
@@ -46,9 +47,7 @@ export const createSellerApi = ({ sql, now, exportStorage }: SellerApiOptions) =
     error instanceof LatchkeyError
       ? c.json(
           { error: { code: error.code, message: error.message } },
-          (error.message === "You do not have permission to make this change."
-            ? 403
-            : error.statusCode) as 401 | 403 | 404 | 409 | 422
+          error.statusCode as 401 | 403 | 404 | 409 | 422
         )
       : (() => {
           throw error;
@@ -132,6 +131,34 @@ export const createSellerApi = ({ sql, now, exportStorage }: SellerApiOptions) =
       },
       201
     );
+  });
+  app.post("/sellers/:sellerId/products/:productId/license-terms", async (c) => {
+    const user = await session(c, true);
+    const sellerId = id.parse(c.req.param("sellerId"));
+    await requireSellerRole(sql, sellerId, user, "admin");
+    const input = await body(c.req.raw);
+    await setProductLicenseTerms(
+      sql,
+      sellerId,
+      id.parse(c.req.param("productId")),
+      {
+        licenseType: z
+          .string()
+          .min(1)
+          .max(100)
+          .nullable()
+          .parse(input.licenseType ?? null),
+        licenseTermsTemplate: z
+          .string()
+          .min(1)
+          .max(2_000)
+          .nullable()
+          .parse(input.licenseTermsTemplate ?? null)
+      },
+      user,
+      now()
+    );
+    return c.json({ updated: true });
   });
   app.post("/sellers/:sellerId/products/:productId/archive", async (c) => {
     const user = await session(c, true);

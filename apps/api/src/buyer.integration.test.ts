@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { runMigrations } from "graphile-worker";
 import { MemoryEmailSender } from "@latchkey/email";
+import { MemoryExportStorage } from "@latchkey/delivery";
 import {
   applyMigrations,
   createBuyerSession,
@@ -68,6 +69,7 @@ const request = async (
 ) => {
   const api = createBuyerApi({
     baseUrl: "https://latchkey.test",
+    exportStorage: new MemoryExportStorage(),
     now: () => now,
     oauth: {
       authorizationUrl: (state) => `/oauth/${state}`,
@@ -153,6 +155,7 @@ test("an expired claim shows a resend option that delivers only to the purchase 
   const api = createBuyerApi({
     baseUrl: "https://latchkey.test",
     email,
+    exportStorage: new MemoryExportStorage(),
     now: () => now,
     oauth: {
       authorizationUrl: (state) => `/oauth/${state}`,
@@ -194,6 +197,7 @@ test("a claim link signed in over plain http still works on the next request (D-
   let state = "";
   const api = createBuyerApi({
     baseUrl: "http://localhost:8080",
+    exportStorage: new MemoryExportStorage(),
     now: () => now,
     oauth: {
       authorizationUrl: (s) => ((state = s), `/oauth/${s}`),
@@ -220,6 +224,7 @@ test("a claim link signed in over https still gets a Secure cookie", async () =>
   let state = "";
   const api = createBuyerApi({
     baseUrl: "https://latchkey.example",
+    exportStorage: new MemoryExportStorage(),
     now: () => now,
     oauth: {
       authorizationUrl: (s) => ((state = s), `/oauth/${s}`),
@@ -302,4 +307,118 @@ test("creating a token without CSRF is rejected and stores nothing", async () =>
   });
   expect(rejected.status).toBe(401);
   expect(await database.sql`SELECT * FROM api_tokens`).toHaveLength(0);
+}, 120_000);
+
+test("a buyer's purchases page spans every seller they bought from, not just one", async () => {
+  const otherSeller = "00000000-0000-0000-0000-000000000099";
+  const otherProduct = "00000000-0000-0000-0000-000000000098";
+  const otherLicense = "00000000-0000-0000-0000-000000000097";
+  const otherSeat = "00000000-0000-0000-0000-000000000096";
+  const first = await sessionFor(buyerA);
+  await request(`/buyer/claims/${claimToken}`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  await database.sql`INSERT INTO sellers (id, slug) VALUES (${otherSeller}::uuid, 'other-seller')`;
+  await database.sql`INSERT INTO products (id, seller_id, name, status, revoke_policy) VALUES (${otherProduct}::uuid, ${otherSeller}::uuid, 'Other Kit', 'active', '{}'::jsonb)`;
+  await database.sql`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at) VALUES (${otherLicense}::uuid, ${otherSeller}::uuid, ${otherProduct}::uuid, 'active', 'one_time', 1, ${now.toISOString()})`;
+  await database.sql`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${otherSeat}::uuid, ${otherLicense}::uuid, ${first.userId}::uuid, ${now.toISOString()})`;
+
+  const response = await request("/purchases", first, { headers: { accept: "application/json" } });
+  expect(response.status).toBe(200);
+  const purchases = (await response.json()) as Array<{ sellerSlug: string; productName: string }>;
+  const sellers = purchases.map((purchase) => purchase.sellerSlug).sort();
+  expect(sellers).toEqual(["other-seller", "seller"]);
+  expect(purchases.find((purchase) => purchase.sellerSlug === "other-seller")?.productName).toBe(
+    "Other Kit"
+  );
+}, 120_000);
+
+test("a license manager can list seats, invite a teammate by claim link, and release a seat, while a non-manager cannot", async () => {
+  const teamLicense = "00000000-0000-0000-0000-000000000201";
+  const teamSeatA = "00000000-0000-0000-0000-000000000211";
+  const teamSeatB = "00000000-0000-0000-0000-000000000212";
+  const teamClaimToken = "team-license-claim-token-abcdefghijk";
+  await database.sql`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at) VALUES (${teamLicense}::uuid, ${seller}::uuid, ${product}::uuid, 'active', 'one_time', 2, ${now.toISOString()})`;
+  await database.sql`INSERT INTO seats (id, license_id) VALUES (${teamSeatA}::uuid, ${teamLicense}::uuid), (${teamSeatB}::uuid, ${teamLicense}::uuid)`;
+  await createClaim(database.sql, teamLicense, teamClaimToken, now);
+
+  const managerSession = await sessionFor(buyerA);
+  const outsiderSession = await sessionFor(buyerB);
+  await request(`/buyer/claims/${teamClaimToken}`, managerSession, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": managerSession.csrfToken }
+  });
+
+  const seatsAsOutsider = await request(`/buyer/licenses/${teamLicense}/seats`, outsiderSession);
+  expect(seatsAsOutsider.status).toBe(404);
+
+  const seatsAsManager = await request(`/buyer/licenses/${teamLicense}/seats`, managerSession);
+  expect(seatsAsManager.status).toBe(200);
+  const seats = (await seatsAsManager.json()) as Array<{ id: string; githubUserId: string | null }>;
+  expect(seats).toHaveLength(2);
+  const openSeat = seats.find((seat) => seat.githubUserId === null);
+  if (openSeat === undefined) throw new Error("expected an open seat");
+
+  const invited = await request(`/buyer/licenses/${teamLicense}/invites`, managerSession, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-csrf-token": managerSession.csrfToken
+    },
+    body: JSON.stringify({ method: "claim_link" })
+  });
+  expect(invited.status).toBe(201);
+  const { claimUrl } = (await invited.json()) as { claimUrl: string };
+  expect(claimUrl).toContain("/claim/");
+
+  const released = await request(
+    `/buyer/licenses/${teamLicense}/seats/${openSeat.id}/release`,
+    outsiderSession,
+    {
+      method: "POST",
+      headers: { accept: "application/json", "x-csrf-token": outsiderSession.csrfToken }
+    }
+  );
+  expect(released.status).toBe(404);
+}, 120_000);
+
+test("a buyer with a built download gets a signed url, a buyer without a version yet gets 404, and another buyer's license is never found", async () => {
+  const noVersionProduct = "00000000-0000-0000-0000-000000000220";
+  const downloadDeliverable = "00000000-0000-0000-0000-000000000221";
+  const downloadLicense = "00000000-0000-0000-0000-000000000222";
+  const downloadSeat = "00000000-0000-0000-0000-000000000223";
+  const noVersionDeliverable = "00000000-0000-0000-0000-000000000224";
+  const noVersionLicense = "00000000-0000-0000-0000-000000000225";
+  const noVersionSeat = "00000000-0000-0000-0000-000000000226";
+  const first = await sessionFor(buyerA);
+  const second = await sessionFor(buyerB);
+
+  await database.sql`INSERT INTO products (id, seller_id, name, status, revoke_policy) VALUES (${noVersionProduct}::uuid, ${seller}::uuid, 'Unbuilt Kit', 'active', '{}'::jsonb)`;
+  await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${downloadDeliverable}::uuid, ${product}::uuid, 'download', '{"organization":"seller","repo":"widget-kit"}'::jsonb)`;
+  await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${noVersionDeliverable}::uuid, ${noVersionProduct}::uuid, 'download', '{"organization":"seller","repo":"unbuilt-kit"}'::jsonb)`;
+  await database.sql`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at) VALUES (${downloadLicense}::uuid, ${seller}::uuid, ${product}::uuid, 'active', 'one_time', 1, ${now.toISOString()})`;
+  await database.sql`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at) VALUES (${noVersionLicense}::uuid, ${seller}::uuid, ${noVersionProduct}::uuid, 'active', 'one_time', 1, ${now.toISOString()})`;
+  await database.sql`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${downloadSeat}::uuid, ${downloadLicense}::uuid, ${first.userId}::uuid, ${now.toISOString()})`;
+  await database.sql`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${noVersionSeat}::uuid, ${noVersionLicense}::uuid, ${first.userId}::uuid, ${now.toISOString()})`;
+  await database.sql`INSERT INTO artifact_versions (id, deliverable_id, version, released_at, s3_key, sha256) VALUES ('00000000-0000-0000-0000-000000000227'::uuid, ${downloadDeliverable}::uuid, 'v1.0.0', ${now.toISOString()}, 'downloads/kit/v1.0.0.zip', 'deadbeef')`;
+
+  const ready = await request(`/buyer/access/${downloadLicense}/download`, first, {
+    headers: { accept: "application/json" }
+  });
+  expect(ready.status).toBe(200);
+  const readyBody = (await ready.json()) as { url: string; version: string };
+  expect(readyBody.version).toBe("v1.0.0");
+  expect(readyBody.url).toContain("downloads%2Fkit%2Fv1.0.0.zip");
+
+  const notBuiltYet = await request(`/buyer/access/${noVersionLicense}/download`, first, {
+    headers: { accept: "application/json" }
+  });
+  expect(notBuiltYet.status).toBe(404);
+
+  const notMine = await request(`/buyer/access/${downloadLicense}/download`, second, {
+    headers: { accept: "application/json" }
+  });
+  expect(notMine.status).toBe(404);
 }, 120_000);

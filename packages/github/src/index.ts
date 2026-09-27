@@ -45,10 +45,14 @@ export interface GitHubClient {
   getPendingInvitation(target: TeamTarget, userId: bigint): Awaitable<boolean>;
   /** Null means the file does not exist at that ref, or the ref itself does not exist. */
   getRepositoryFile(target: RepositoryTarget, path: string, ref: string): Awaitable<string | null>;
+  /** Null means the ref does not exist. Real GitHub 302s to the actual download; the fake needs no such distinction. */
+  getRepositoryZip(target: RepositoryTarget, ref: string): Awaitable<Uint8Array | null>;
   getTeamMembership(target: TeamTarget, userId: bigint): Awaitable<boolean>;
   inviteToTeam(target: TeamTarget, userId: bigint): Awaitable<void>;
   listTeamMembers(target: TeamTarget): Awaitable<bigint[]>;
   listUserTeams(organization: string, userId: bigint, installationId?: bigint): Awaitable<string[]>;
+  /** Null means no GitHub account has that login (invariant 7: identity stays the numeric id from here on). */
+  resolveUserByLogin(login: string): Awaitable<bigint | null>;
   removeOrganizationMember(
     organization: string,
     userId: bigint,
@@ -299,11 +303,44 @@ export class GitHubAppClient implements GitHubClient {
     });
   }
 
-  private async appRequest<T>(path: string): Promise<T> {
+  /**
+   * GitHub's zipball endpoint 302s to the real download location; a plain `fetch` follows that
+   * redirect transparently, so this bypasses `request()`'s JSON parsing entirely rather than
+   * trying to make one helper handle both shapes.
+   */
+  public async getRepositoryZip(target: RepositoryTarget, ref: string): Promise<Uint8Array | null> {
+    const installationId = this.installationId(target);
+    return this.withInstallation(installationId, async () => {
+      const token = await this.getInstallationToken(installationId);
+      const response = await this.fetcher(
+        `${this.apiBaseUrl}/repos/${encodeURIComponent(target.organization)}/${encodeURIComponent(target.repo)}/zipball/${encodeURIComponent(ref)}`,
+        { headers: this.headers(token) }
+      );
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        if (response.status === 429 || response.status >= 500 || this.isRateLimited(response)) {
+          const retryAfterMs = this.retryAfterMs(response);
+          throw new ExternalTransientError("GitHub is temporarily unavailable.", retryAfterMs);
+        }
+        throw new ExternalPermanentError("GitHub could not complete this access change.");
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    });
+  }
+
+  public async resolveUserByLogin(login: string): Promise<bigint | null> {
+    const user = await this.appRequest<{ id: number } | null>(
+      `/users/${encodeURIComponent(login)}`,
+      true
+    );
+    return user === null ? null : BigInt(user.id);
+  }
+
+  private async appRequest<T>(path: string, allowNotFound = false): Promise<T> {
     const response = await this.fetcher(`${this.apiBaseUrl}${path}`, {
       headers: this.headers(this.createAppJwt())
     });
-    return this.parseResponse<T>(response, false);
+    return this.parseResponse<T>(response, allowNotFound);
   }
 
   private createAppJwt(): string {
@@ -474,6 +511,7 @@ export class FakeGitHub implements GitHubClient {
   private readonly organizations = new Map<string, OrganizationState>();
   private readonly repositoryFiles = new Map<string, string>();
   private readonly repositoryFileFailures: GitHubFailure[] = [];
+  private readonly repositoryZips = new Map<string, Uint8Array>();
 
   public constructor(
     private readonly clock: Clock = { now: () => new Date(0) },
@@ -600,6 +638,12 @@ export class FakeGitHub implements GitHubClient {
     return [...state.teams].flatMap(([slug, members]) => (members.has(userId) ? [slug] : []));
   }
 
+  public resolveUserByLogin(login: string): bigint | null {
+    for (const [userId, candidateLogin] of this.logins)
+      if (candidateLogin === login && !this.deletedUsers.has(userId)) return userId;
+    return null;
+  }
+
   /** Test setup: makes a file readable at (organization, repo, ref, path). Absent means 404. */
   public setRepositoryFile(
     target: RepositoryTarget,
@@ -623,8 +667,26 @@ export class FakeGitHub implements GitHubClient {
     return this.repositoryFiles.get(this.repositoryFileKey(target, ref, path)) ?? null;
   }
 
+  /** Test setup: makes a whole-repo zip readable at (organization, repo, ref). Absent means 404. */
+  public setRepositoryZip(target: RepositoryTarget, ref: string, content: Uint8Array): void {
+    this.repositoryZips.set(this.repositoryZipKey(target, ref), content);
+  }
+
+  public getRepositoryZip(target: RepositoryTarget, ref: string): Uint8Array | null {
+    const failure = this.repositoryFileFailures.shift();
+    if (failure === "not_found") return null;
+    if (failure === "rate_limited") throw new ExternalTransientError("GitHub rate limit reached.");
+    if (failure === "server_error")
+      throw new ExternalTransientError("GitHub is temporarily unavailable.");
+    return this.repositoryZips.get(this.repositoryZipKey(target, ref)) ?? null;
+  }
+
   private repositoryFileKey(target: RepositoryTarget, ref: string, path: string): string {
     return `${target.organization}/${target.repo}@${ref}:${path}`;
+  }
+
+  private repositoryZipKey(target: RepositoryTarget, ref: string): string {
+    return `${target.organization}/${target.repo}@${ref}`;
   }
 
   private organization(name: string): OrganizationState {

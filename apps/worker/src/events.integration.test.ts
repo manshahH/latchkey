@@ -373,7 +373,7 @@ test("queued export round-trips every seller record into private object storage"
   await runAvailableJobs(new FakeGitHub(), undefined, undefined, storage);
   const stored = storage.objects.get(`exports/${seller}/${exportId}.json`);
   expect(stored).toBeDefined();
-  const exported = JSON.parse(stored?.body ?? "{}") as {
+  const exported = JSON.parse(typeof stored?.body === "string" ? stored.body : "{}") as {
     licenses: { id: string }[];
     seats: { id: string }[];
     buyers: { userId: string }[];

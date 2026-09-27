@@ -18,6 +18,9 @@ importers:
       '@latchkey/config':
         specifier: workspace:*
         version: link:packages/config
+      '@latchkey/delivery':
+        specifier: workspace:*
+        version: link:packages/delivery
       '@latchkey/github':
         specifier: workspace:*
         version: link:packages/github

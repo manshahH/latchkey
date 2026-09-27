@@ -32,6 +32,7 @@
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@latchkey/config": "workspace:*",
+    "@latchkey/delivery": "workspace:*",
     "@latchkey/github": "workspace:*",
     "@latchkey/testing": "workspace:*",
     "@playwright/test": "^1.57.0",

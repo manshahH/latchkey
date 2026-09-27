@@ -1,23 +1,30 @@
 import { createHash } from "node:crypto";
 
 import { claimLinkEmail, type EmailSender } from "@latchkey/email";
-import { LatchkeyError, ValidationError } from "@latchkey/core";
+import { AuthError, LatchkeyError, NotFoundError, ValidationError } from "@latchkey/core";
+import type { ExportStorage } from "@latchkey/delivery";
 import {
   claimSeat,
   consumeOAuthState,
   createApiToken,
   createBuyerSession,
+  createManagerClaimLink,
   createOAuthState,
+  createSeatUsernameInvite,
   deleteBuyerSession,
   getBuyerAccess,
   getBuyerSession,
   getClaimDetails,
   listApiTokens,
   listBuyerPurchases,
+  listLicenseSeats,
+  listSeatUsernameInvites,
   releaseInactiveSeat,
+  releaseManagedSeat,
   replaceClaimForResend,
   requireBuyerSession,
   reserveEmail,
+  resolveDownloadForBuyer,
   revokeApiToken,
   type ApiTokenSummary,
   type BuyerIdentity
@@ -36,6 +43,7 @@ export interface GitHubOAuth {
 export interface BuyerApiOptions {
   baseUrl: string;
   email?: EmailSender;
+  exportStorage: ExportStorage;
   now: () => Date;
   oauth: GitHubOAuth;
   sql: Sql;
@@ -215,6 +223,8 @@ export const createBuyerApi = (options: BuyerApiOptions) => {
       false
     );
     const access = await getBuyerAccess(options.sql, userId, licenseId);
+    if ((context.req.header("accept") ?? "").includes("application/json"))
+      return context.json(access);
     const action =
       access.observed === "invited"
         ? '<p><a class="button" href="https://github.com/notifications">Open GitHub to accept your invite</a></p>'
@@ -271,6 +281,8 @@ export const createBuyerApi = (options: BuyerApiOptions) => {
       false
     );
     const purchases = await listBuyerPurchases(options.sql, userId);
+    if ((context.req.header("accept") ?? "").includes("application/json"))
+      return context.json(purchases);
     const entries = purchases
       .map(
         (purchase) =>
@@ -299,6 +311,98 @@ export const createBuyerApi = (options: BuyerApiOptions) => {
       options.now()
     );
     return context.json({ released: true });
+  });
+  app.get("/buyer/access/:licenseId/download", async (context) => {
+    const licenseId = IdSchema.parse(context.req.param("licenseId"));
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      undefined,
+      options.now(),
+      false
+    );
+    const resolved = await resolveDownloadForBuyer(options.sql, userId, licenseId);
+    if (resolved === "access_denied")
+      throw new AuthError(
+        "This license no longer has access. Contact the seller if you think this is wrong.",
+        403
+      );
+    if (resolved === "not_found")
+      throw new NotFoundError("No download is available for this purchase yet.");
+    return context.json({
+      url: await options.exportStorage.signedDownloadUrl(resolved.s3Key, 300),
+      version: resolved.version
+    });
+  });
+  app.get("/buyer/licenses/:licenseId/seats", async (context) => {
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      undefined,
+      options.now(),
+      false
+    );
+    const seats = await listLicenseSeats(
+      options.sql,
+      userId,
+      IdSchema.parse(context.req.param("licenseId"))
+    );
+    return context.json(seats);
+  });
+  app.post("/buyer/licenses/:licenseId/seats/:seatId/release", async (context) => {
+    const licenseId = IdSchema.parse(context.req.param("licenseId"));
+    const seatId = IdSchema.parse(context.req.param("seatId"));
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      context.req.header("x-csrf-token") ?? getCookie(context, "lk_csrf"),
+      options.now(),
+      true
+    );
+    await releaseManagedSeat(options.sql, userId, licenseId, seatId, options.now());
+    return context.json({ released: true });
+  });
+  app.get("/buyer/licenses/:licenseId/invites", async (context) => {
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      undefined,
+      options.now(),
+      false
+    );
+    const invites = await listSeatUsernameInvites(
+      options.sql,
+      userId,
+      IdSchema.parse(context.req.param("licenseId"))
+    );
+    return context.json(invites);
+  });
+  /** "claim_link" hands out a link any GitHub account can use, "username" resolves through GitHub before granting (M9). */
+  app.post("/buyer/licenses/:licenseId/invites", async (context) => {
+    const licenseId = IdSchema.parse(context.req.param("licenseId"));
+    const body = await formOrJson(context.req.raw);
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      context.req.header("x-csrf-token") ?? z.string().optional().parse(body.csrf),
+      options.now(),
+      true
+    );
+    const method = z.enum(["claim_link", "username"]).parse(body.method);
+    if (method === "username") {
+      const login = z.string().min(1).max(100).parse(body.login);
+      const invite = await createSeatUsernameInvite(
+        options.sql,
+        userId,
+        licenseId,
+        login,
+        options.now()
+      );
+      return context.json({ id: invite.id, status: "pending" }, 201);
+    }
+    const token = options.token();
+    await createManagerClaimLink(options.sql, userId, licenseId, token, options.now());
+    return context.json({ claimUrl: `${options.baseUrl}/claim/${token}` }, 201);
   });
   return app;
 };

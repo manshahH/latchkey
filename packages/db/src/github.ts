@@ -145,17 +145,18 @@ const processRelease = async (
 ): Promise<void> => {
   if (action !== "published") return;
   const parsed = ReleasePayloadSchema.parse(payload);
-  const deliverables = await sql<{ id: string }[]>`
-    SELECT deliverables.id FROM deliverables
+  const deliverables = await sql<{ id: string; type: "registry" | "download" }[]>`
+    SELECT deliverables.id, deliverables.type FROM deliverables
     JOIN products ON products.id = deliverables.product_id
     JOIN github_installations ON github_installations.seller_id = products.seller_id
-    WHERE deliverables.type = 'registry'
+    WHERE deliverables.type IN ('registry', 'download')
       AND deliverables.config ->> 'organization' = ${parsed.repository.owner.login}
       AND deliverables.config ->> 'repo' = ${parsed.repository.name}
   `;
   for (const deliverable of deliverables)
     await enqueueJob(sql, {
-      taskIdentifier: "build_registry_artifacts",
+      taskIdentifier:
+        deliverable.type === "registry" ? "build_registry_artifacts" : "build_download_artifact",
       payload: {
         deliverableId: deliverable.id,
         installationId: String(parsed.installation.id),
@@ -163,7 +164,7 @@ const processRelease = async (
         repo: parsed.repository.name,
         tag: parsed.release.tag_name
       },
-      jobKey: `registry-artifacts:${deliverable.id}:${parsed.release.tag_name}`,
+      jobKey: `${deliverable.type}-artifact:${deliverable.id}:${parsed.release.tag_name}`,
       runAt: now
     });
 };

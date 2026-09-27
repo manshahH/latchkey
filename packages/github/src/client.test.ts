@@ -120,3 +120,45 @@ test("real client decodes a repository file's base64 content and returns null wh
   );
   expect(await client.getRepositoryFile(repoTarget, "missing.json", "v1.0.0")).toBeNull();
 });
+
+test("real client resolves a login to its numeric id and returns null for a 404", async () => {
+  const client = new GitHubAppClient({
+    appId: 123,
+    privateKey,
+    now: () => new Date("2026-01-01T00:00:00Z"),
+    fetch: (input: string | URL | Request): Promise<Response> => {
+      const url = urlFor(input);
+      if (url.endsWith("/users/octocat")) return Promise.resolve(Response.json({ id: 583231 }));
+      if (url.endsWith("/users/nobody-by-this-name"))
+        return Promise.resolve(new Response("", { status: 404 }));
+      return Promise.reject(new Error("Unexpected test request."));
+    }
+  });
+
+  expect(await client.resolveUserByLogin("octocat")).toBe(583231n);
+  expect(await client.resolveUserByLogin("nobody-by-this-name")).toBeNull();
+});
+
+test("real client downloads a repository zip, follows GitHub's redirect, and returns null for a 404", async () => {
+  const repoTarget = { installationId: 99n, organization: "seller-org", repo: "widget-kit" };
+  const zipBytes = new Uint8Array([80, 75, 3, 4]);
+  const client = new GitHubAppClient({
+    appId: 123,
+    privateKey,
+    now: () => new Date("2026-01-01T00:00:00Z"),
+    fetch: (input: string | URL | Request): Promise<Response> => {
+      const url = urlFor(input);
+      if (url.endsWith("/access_tokens"))
+        return Promise.resolve(
+          Response.json({ token: "installation-token", expires_at: "2026-01-01T01:00:00Z" })
+        );
+      if (url.includes("/zipball/v1.0.0")) return Promise.resolve(new Response(zipBytes));
+      if (url.includes("/zipball/missing-tag"))
+        return Promise.resolve(new Response("", { status: 404 }));
+      return Promise.reject(new Error("Unexpected test request."));
+    }
+  });
+
+  expect(await client.getRepositoryZip(repoTarget, "v1.0.0")).toEqual(zipBytes);
+  expect(await client.getRepositoryZip(repoTarget, "missing-tag")).toBeNull();
+});

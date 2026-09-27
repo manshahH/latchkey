@@ -12,6 +12,7 @@ test("worker exposes the Graphile M2, M3, and M8 task identifiers", () => {
     now: () => new Date("2026-01-01T00:00:00Z")
   });
   expect(Object.keys(tasks).sort()).toEqual([
+    "build_download_artifact",
     "build_registry_artifacts",
     "generate_export",
     "invite_watchdog",
@@ -20,6 +21,7 @@ test("worker exposes the Graphile M2, M3, and M8 task identifiers", () => {
     "process_event",
     "process_github_webhook",
     "reconcile_grant",
-    "reconcile_sweep"
+    "reconcile_sweep",
+    "resolve_seat_username_invite"
   ]);
 });

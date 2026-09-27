@@ -9,6 +9,7 @@ import {
   createDatabase,
   reconcileStoredGrant
 } from "../packages/db/src/index.js";
+import { MemoryExportStorage } from "@latchkey/delivery";
 import { FakeGitHub } from "@latchkey/github";
 import { startPostgres, type TestPostgres } from "@latchkey/testing";
 
@@ -49,6 +50,7 @@ test.beforeAll(async () => {
   let tokens = 0;
   const app = createBuyerApi({
     baseUrl: "http://127.0.0.1",
+    exportStorage: new MemoryExportStorage(),
     now: () => now,
     oauth: {
       authorizationUrl: (state) => `/auth/github/callback?state=${state}&code=mock`,

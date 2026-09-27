@@ -35,6 +35,7 @@ export interface BuyerAccess {
   observed:
     "active" | "error_retrying" | "invited" | "needs_attention" | "none" | "queued" | "removed";
   productName: string;
+  sellerSlug: string;
 }
 
 const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
@@ -210,8 +211,10 @@ export const claimSeat = async (
       throw new ConflictError(
         "This purchase is already linked to another GitHub account. If you need help, ask the seller to resend your claim link."
       );
-    const licenses = await transaction<{ seller_id: string; status: string }[]>`
-      SELECT seller_id, status FROM licenses WHERE id = ${claim.license_id}::uuid FOR UPDATE
+    const licenses = await transaction<
+      { seller_id: string; status: string; manager_user_id: string | null }[]
+    >`
+      SELECT seller_id, status, manager_user_id FROM licenses WHERE id = ${claim.license_id}::uuid FOR UPDATE
     `;
     const license = licenses[0];
     if (license === undefined) throw new NotFoundError("This purchase is not available.");
@@ -219,6 +222,10 @@ export const claimSeat = async (
       UPDATE seats SET user_id = ${userId}::uuid, assigned_at = ${now.toISOString()}, released_at = NULL
       WHERE id = ${seat.id}::uuid
     `;
+    // The first person to claim a seat on a license becomes its manager (M9), the one who can
+    // invite and release teammates. A later claimant never displaces an already-set manager.
+    if (license.manager_user_id === null)
+      await transaction`UPDATE licenses SET manager_user_id = ${userId}::uuid WHERE id = ${claim.license_id}::uuid`;
     await transaction`UPDATE claims SET used_count = used_count + 1 WHERE id = ${claim.id}::uuid`;
     const grants = await transaction<{ id: string }[]>`
       UPDATE grants
@@ -246,7 +253,7 @@ export const getBuyerAccess = async (
   licenseId: string
 ): Promise<BuyerAccess> => {
   const rows = await sql<BuyerAccess[]>`
-    SELECT licenses.id, products.name AS "productName", COALESCE(
+    SELECT licenses.id, products.name AS "productName", sellers.slug AS "sellerSlug", COALESCE(
       CASE WHEN BOOL_OR(grants.observed = 'active') THEN 'active'
       WHEN BOOL_OR(grants.observed = 'invited') THEN 'invited'
       WHEN BOOL_OR(grants.observed = 'queued') THEN 'queued'
@@ -255,19 +262,25 @@ export const getBuyerAccess = async (
       WHEN BOOL_OR(grants.observed = 'removed') THEN 'removed'
       ELSE 'none' END, 'none') AS observed
     FROM licenses JOIN products ON products.id = licenses.product_id
+    JOIN sellers ON sellers.id = licenses.seller_id
     JOIN seats ON seats.license_id = licenses.id
     LEFT JOIN grants ON grants.seat_id = seats.id
     WHERE licenses.id = ${licenseId}::uuid AND seats.user_id = ${userId}::uuid
-    GROUP BY licenses.id, products.name
+    GROUP BY licenses.id, products.name, sellers.slug
   `;
   const access = rows[0];
   if (access === undefined) throw new NotFoundError("This purchase was not found.");
   return access;
 };
 
+/**
+ * Deliberately not scoped to one seller: this is the buyer's home across every seller they have
+ * bought from (M10, "one page for buyer to see everything"), the same query shape whether they
+ * bought from one seller or ten.
+ */
 export const listBuyerPurchases = async (sql: Queryable, userId: string): Promise<BuyerAccess[]> =>
   sql<BuyerAccess[]>`
-    SELECT licenses.id, products.name AS "productName", COALESCE(
+    SELECT licenses.id, products.name AS "productName", sellers.slug AS "sellerSlug", COALESCE(
       CASE WHEN BOOL_OR(grants.observed = 'active') THEN 'active'
       WHEN BOOL_OR(grants.observed = 'invited') THEN 'invited'
       WHEN BOOL_OR(grants.observed = 'queued') THEN 'queued'
@@ -276,10 +289,11 @@ export const listBuyerPurchases = async (sql: Queryable, userId: string): Promis
       WHEN BOOL_OR(grants.observed = 'removed') THEN 'removed'
       ELSE 'none' END, 'none') AS observed
     FROM licenses JOIN products ON products.id = licenses.product_id
+    JOIN sellers ON sellers.id = licenses.seller_id
     JOIN seats ON seats.license_id = licenses.id
     LEFT JOIN grants ON grants.seat_id = seats.id
     WHERE seats.user_id = ${userId}::uuid
-    GROUP BY licenses.id, products.name ORDER BY licenses.id
+    GROUP BY licenses.id, products.name, sellers.slug ORDER BY licenses.id
   `;
 
 export const releaseInactiveSeat = async (
