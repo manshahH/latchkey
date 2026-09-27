@@ -68,6 +68,15 @@ const githubWebhookDeliveriesTableExists = async (): Promise<boolean> => {
   `;
   return rows[0]?.exists ?? false;
 };
+const apiTokensTableExists = async (): Promise<boolean> => {
+  const rows = await database.sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'api_tokens'
+    ) AS exists
+  `;
+  return rows[0]?.exists ?? false;
+};
 beforeAll(async () => {
   postgres = await startPostgres();
   database = createDatabase(postgres.databaseUrl);
@@ -79,12 +88,17 @@ afterAll(async () => {
 });
 
 test("migrations run up, down, then up on a clean Postgres database", async () => {
-  expect(await applyMigrations(database.sql)).toBe(7);
+  expect(await applyMigrations(database.sql)).toBe(8);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await providerSecretRotationColumnsExist()).toBe(true);
   expect(await authStatesTableExists()).toBe(true);
+  expect(await sellerPlanUsageTableExists()).toBe(true);
+  expect(await apiTokensTableExists()).toBe(true);
+
+  expect(await rollbackMigration(database.sql)).toBe(true);
+  expect(await apiTokensTableExists()).toBe(false);
   expect(await sellerPlanUsageTableExists()).toBe(true);
 
   expect(await rollbackMigration(database.sql)).toBe(true);
@@ -105,12 +119,13 @@ test("migrations run up, down, then up on a clean Postgres database", async () =
   expect(await rollbackMigration(database.sql)).toBe(true);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(false);
-  expect(await applyMigrations(database.sql)).toBe(6);
+  expect(await applyMigrations(database.sql)).toBe(7);
   expect(await schemaMarkerExists()).toBe(true);
   expect(await sellersTableExists()).toBe(true);
   expect(await githubWebhookDeliveriesTableExists()).toBe(true);
   expect(await providerSecretRotationColumnsExist()).toBe(true);
   expect(await authStatesTableExists()).toBe(true);
   expect(await sellerPlanUsageTableExists()).toBe(true);
+  expect(await apiTokensTableExists()).toBe(true);
   expect(await applyMigrations(database.sql)).toBe(0);
 }, 120_000);

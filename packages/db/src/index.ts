@@ -52,3 +52,5 @@ export {
 } from "./buyer.js";
 export type { BuyerAccess, BuyerIdentity, BuyerSession, ClaimDetails } from "./buyer.js";
 export * from "./seller.js";
+export { createApiToken, listApiTokens, resolveApiToken, revokeApiToken } from "./registry.js";
+export type { ApiTokenResolution, ApiTokenSummary } from "./registry.js";

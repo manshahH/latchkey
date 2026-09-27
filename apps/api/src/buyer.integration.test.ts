@@ -234,3 +234,72 @@ test("a claim link signed in over https still gets a Secure cookie", async () =>
   const setCookie = callback.headers.getSetCookie();
   expect(setCookie.some((c) => c.startsWith("lk_session=") && /Secure/i.test(c))).toBe(true);
 }, 120_000);
+
+test("a buyer can create, see, and revoke an access token for their own claimed purchase", async () => {
+  const first = await sessionFor(buyerA);
+  await request(`/buyer/claims/${claimToken}`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+
+  const created = await request(`/buyer/access/${licenseA}/tokens`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  expect(created.status).toBe(200);
+  const body = (await created.json()) as { id: string; prefix: string; token: string };
+  expect(body.token.length).toBeGreaterThan(20);
+  expect(body.prefix).toBe(body.token.slice(0, 8));
+
+  const page = await request(`/access/${licenseA}`, first);
+  const html = await page.text();
+  expect(html).toContain(body.prefix);
+  expect(html).not.toContain(body.token);
+
+  const revoked = await request(`/buyer/tokens/${body.id}/revoke`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  expect(revoked.status).toBe(200);
+  expect(await revoked.json()).toEqual({ revoked: true });
+}, 120_000);
+
+test("a buyer cannot revoke another buyer's token, while the rightful owner still can", async () => {
+  const first = await sessionFor(buyerA);
+  const second = await sessionFor(buyerB);
+  await request(`/buyer/claims/${claimToken}`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  const created = await request(`/buyer/access/${licenseA}/tokens`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  const { id } = (await created.json()) as { id: string };
+
+  const denied = await request(`/buyer/tokens/${id}/revoke`, second, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": second.csrfToken }
+  });
+  expect(denied.status).toBe(404);
+
+  const allowed = await request(`/buyer/tokens/${id}/revoke`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  expect(allowed.status).toBe(200);
+}, 120_000);
+
+test("creating a token without CSRF is rejected and stores nothing", async () => {
+  const first = await sessionFor(buyerA);
+  await request(`/buyer/claims/${claimToken}`, first, {
+    method: "POST",
+    headers: { accept: "application/json", "x-csrf-token": first.csrfToken }
+  });
+  const rejected = await request(`/buyer/access/${licenseA}/tokens`, first, {
+    method: "POST",
+    headers: { accept: "application/json" }
+  });
+  expect(rejected.status).toBe(401);
+  expect(await database.sql`SELECT * FROM api_tokens`).toHaveLength(0);
+}, 120_000);
