@@ -364,6 +364,27 @@ Format (newest first):
 - Not done / deferred: the owner still needs to click through the real GitHub OAuth consent screen in a browser; I could not do that from here since it needs the owner's GitHub login. Everything else from the previous entry (Cloudflare hosting, webhooks, soak) is still waiting on D-034.
 - Docs updated: architecture section 13, `m7-supabase-cloudflare-setup.md`, this work log.
 - Next step: owner retries GitHub sign-in at `http://localhost:8080/auth/github?returnTo=/purchases` with the restarted server.
+
+### 2026-09-27: M8 kickoff, buyer registry token management
+- Branch / commits: `m8/registry-token-management` (new, off `main`; `m7/security-pass-and-sandbox-proof` is a separate still-open PR).
+- Goal: start M8 (registry delivery). Read architecture section 11 and the M8 plan first. Plan for this session: build the schema and the one M8 task that needs no GitHub permission at all (task 4, buyer token management), split off from the tasks that need Contents: read (tasks 1 to 3, next).
+- Done:
+  - Migration `0007_registry_tokens`: `artifact_versions` and `api_tokens`, exactly the columns `architecture.md` section 5.1 already specified. Registered in `migrator.ts`'s migration list (a file separate from the migrations directory itself; a migration is not picked up just by adding the `.sql` files).
+  - `packages/db/src/registry.ts`: `createApiToken` (tenant-scoped to the caller's own seat on the license), `listApiTokens` (tenant-scoped), `revokeApiToken` (tenant-scoped, idempotent), `resolveApiToken` (the "token -> seat -> license" resolution architecture 11.1 describes, for the registry endpoint to use next; a revoked token, a released seat, and an unknown token all resolve to `null` with no distinguishing error, so a future caller cannot tell "wrong token" from "right token, access ended" by response shape).
+  - `apps/api/src/buyer.ts`: `POST /buyer/access/:licenseId/tokens` (create, CSRF-protected, shows the raw token exactly once, matching the claim and session token pattern already used everywhere else in this file), `POST /buyer/tokens/:tokenId/revoke` (CSRF-protected), and the `/access/:licenseId` page now lists a buyer's own tokens by prefix only with a revoke button per token.
+- Proof: `pnpm check` (recorded below once the full run finished). Targeted runs during development: `registry.integration.test.ts` 6 passed, `buyer.integration.test.ts` 11 passed (4 new), `migrator.integration.test.ts` 1 passed (updated for the new migration count and an added rollback/reapply step), `index.test.ts` updated for the new migration id.
+- Gates and negative tests, each proven non-vacuous by breaking the code and watching the exact named test fail, then restoring:
+  - "a buyer cannot create a token for a license they do not own" (removed the seat ownership filter from `createApiToken`'s query).
+  - "a buyer cannot list or revoke another buyer's token" (removed the ownership filter from `revokeApiToken`, separately from `listApiTokens`; both proven).
+  - "a revoked token does not resolve" (removed the `revoked_at IS NULL` check from `resolveApiToken`).
+  - "a token for a released seat no longer resolves" (removed the `released_at IS NULL` check).
+  - "creating a token without CSRF is rejected and stores nothing" (removed the CSRF argument from the HTTP route's `requireBuyerSession` call).
+- Edge cases considered: a buyer with no tokens yet (shows "No tokens yet," tested); revoking an already-revoked token (idempotent, does not move the timestamp, tested); a released seat (a buyer who released their own seat within the 24-hour window, M5) should not be able to keep using an old token, tested.
+- Decisions made: none new for this slice (D-037 already covers the GitHub permission this milestone eventually needs).
+- Not done / deferred: tasks 1 to 3 and 5 to 6 (fetching a release's contents and building registry item JSON, the registry serving endpoint itself, update-window support, optional fingerprinting). These need the GitHub Contents permission the owner just enabled (D-037); building them is the next step.
+- Docs updated: this work log entry.
+- Next step: build the `release` webhook receiver and the artifact-building job against `FakeGitHub`, using the new `Contents: read` permission's client methods (to add to `packages/github`), then the registry serving endpoint using `resolveApiToken`.
+
 ### 2026-09-27: M7 remaining-work list, pause deployment, start M8
 - Branch / commits: `m7/security-pass-and-sandbox-proof` (continuing PR #2, not yet merged).
 - Goal: the owner asked to write down what is left on M7 in one place, leave Cloudflare deployment paused for now, and move on to the next milestone.

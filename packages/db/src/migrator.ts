@@ -43,6 +43,11 @@ const migrations: readonly Migration[] = [
     downFile: new URL("../migrations/0006_billing.down.sql", import.meta.url),
     id: "0006_billing",
     upFile: new URL("../migrations/0006_billing.sql", import.meta.url)
+  },
+  {
+    downFile: new URL("../migrations/0007_registry_tokens.down.sql", import.meta.url),
+    id: "0007_registry_tokens",
+    upFile: new URL("../migrations/0007_registry_tokens.sql", import.meta.url)
   }
 ];
 

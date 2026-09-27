@@ -5,17 +5,21 @@ import { LatchkeyError, ValidationError } from "@latchkey/core";
 import {
   claimSeat,
   consumeOAuthState,
+  createApiToken,
   createBuyerSession,
   createOAuthState,
   deleteBuyerSession,
   getBuyerAccess,
   getBuyerSession,
   getClaimDetails,
+  listApiTokens,
   listBuyerPurchases,
   releaseInactiveSeat,
   replaceClaimForResend,
   requireBuyerSession,
   reserveEmail,
+  revokeApiToken,
+  type ApiTokenSummary,
   type BuyerIdentity
 } from "@latchkey/db";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -52,6 +56,18 @@ const statusCopy = (status: string): string =>
           : status === "removed"
             ? "Your access is no longer active. Contact the seller if you need help."
             : "Access is on its way. We will keep checking GitHub.";
+const dateOnly = (value: Date): string => value.toISOString().slice(0, 10);
+/** Prefixes only: the full token is never stored, so it can never be shown again after creation. */
+const tokensSection = (licenseId: string, tokens: ApiTokenSummary[], csrf: string): string => {
+  const rows = tokens
+    .map((token) =>
+      token.revokedAt === null
+        ? `<li>${token.prefix}... (created ${dateOnly(token.createdAt)}${token.lastUsedAt === null ? ", never used" : `, last used ${dateOnly(token.lastUsedAt)}`}) <form method="post" action="/buyer/tokens/${token.id}/revoke" style="display:inline"><input type="hidden" name="csrf" value="${csrf}"><button type="submit">Revoke</button></form></li>`
+        : `<li>${token.prefix}... (revoked ${dateOnly(token.revokedAt)})</li>`
+    )
+    .join("");
+  return `<h2>Access tokens</h2><p>Use an access token to install this code with the command line, instead of downloading it by hand.</p><ul>${rows || "<li>No tokens yet.</li>"}</ul><form method="post" action="/buyer/access/${licenseId}/tokens"><input type="hidden" name="csrf" value="${csrf}"><button type="submit">Create a new token</button></form>`;
+};
 const cookieOptions = { httpOnly: true, path: "/", sameSite: "Lax" as const, secure: true };
 const csrfCookieOptions = { httpOnly: false, path: "/", sameSite: "Lax" as const, secure: true };
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
@@ -190,6 +206,7 @@ export const createBuyerApi = (options: BuyerApiOptions) => {
     );
   });
   app.get("/access/:licenseId", async (context) => {
+    const licenseId = IdSchema.parse(context.req.param("licenseId"));
     const userId = await requireBuyerSession(
       options.sql,
       getCookie(context, "lk_session"),
@@ -197,21 +214,53 @@ export const createBuyerApi = (options: BuyerApiOptions) => {
       options.now(),
       false
     );
-    const access = await getBuyerAccess(
-      options.sql,
-      userId,
-      IdSchema.parse(context.req.param("licenseId"))
-    );
+    const access = await getBuyerAccess(options.sql, userId, licenseId);
     const action =
       access.observed === "invited"
         ? '<p><a class="button" href="https://github.com/notifications">Open GitHub to accept your invite</a></p>'
         : "";
+    const tokens = await listApiTokens(options.sql, userId, licenseId);
+    const csrf = getCookie(context, "lk_csrf") ?? "";
     return context.html(
       page(
         `Access to ${access.productName}`,
-        `<h1>${access.productName}</h1><p>${statusCopy(access.observed)}</p>${action}<p><a href="/purchases">My purchases</a></p>`
+        `<h1>${access.productName}</h1><p>${statusCopy(access.observed)}</p>${action}${tokensSection(licenseId, tokens, csrf)}<p><a href="/purchases">My purchases</a></p>`
       )
     );
+  });
+  app.post("/buyer/access/:licenseId/tokens", async (context) => {
+    const licenseId = IdSchema.parse(context.req.param("licenseId"));
+    const body = await formOrJson(context.req.raw);
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      context.req.header("x-csrf-token") ?? z.string().optional().parse(body.csrf),
+      options.now(),
+      true
+    );
+    const raw = options.token();
+    const created = await createApiToken(options.sql, userId, licenseId, raw, options.now());
+    if ((context.req.header("accept") ?? "").includes("application/json"))
+      return context.json({ id: created.id, prefix: created.prefix, token: raw });
+    return context.html(
+      page(
+        "Your new access token",
+        `<h1>Your new access token</h1><p>Copy this now. You will not be able to see it again.</p><p><code>${raw}</code></p><p><a href="/access/${licenseId}">Back to your access</a></p>`
+      )
+    );
+  });
+  app.post("/buyer/tokens/:tokenId/revoke", async (context) => {
+    const tokenId = IdSchema.parse(context.req.param("tokenId"));
+    const body = await formOrJson(context.req.raw);
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      context.req.header("x-csrf-token") ?? z.string().optional().parse(body.csrf),
+      options.now(),
+      true
+    );
+    await revokeApiToken(options.sql, userId, tokenId, options.now());
+    return context.json({ revoked: true });
   });
   app.get("/purchases", async (context) => {
     const userId = await requireBuyerSession(
