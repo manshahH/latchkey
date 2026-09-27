@@ -20,6 +20,7 @@ export interface ApiTokenSummary {
 
 export interface ApiTokenResolution {
   sellerId: string;
+  sellerSlug: string;
   productId: string;
   productName: string;
   licenseId: string;
@@ -121,15 +122,17 @@ export const resolveApiToken = async (
     (Omit<ApiTokenResolution, "updatesUntil"> & { updatesUntil: Date | string | null })[]
   >`
     UPDATE api_tokens SET last_used_at = ${now.toISOString()}
-    FROM seats, licenses, products
+    FROM seats, licenses, products, sellers
     WHERE api_tokens.token_hash = ${hash(token)}
       AND api_tokens.revoked_at IS NULL
       AND seats.id = api_tokens.seat_id AND seats.released_at IS NULL
       AND licenses.id = api_tokens.license_id
       AND products.id = licenses.product_id
-    RETURNING licenses.seller_id AS "sellerId", products.id AS "productId",
-      products.name AS "productName", licenses.id AS "licenseId",
-      licenses.status AS "licenseStatus", licenses.updates_until AS "updatesUntil"
+      AND sellers.id = licenses.seller_id
+    RETURNING licenses.seller_id AS "sellerId", sellers.slug AS "sellerSlug",
+      products.id AS "productId", products.name AS "productName",
+      licenses.id AS "licenseId", licenses.status AS "licenseStatus",
+      licenses.updates_until AS "updatesUntil"
   `;
   const row = rows[0];
   return row === undefined ? null : { ...row, updatesUntil: toDate(row.updatesUntil) };
@@ -204,4 +207,45 @@ export const storeArtifactVersion = async (
     RETURNING id
   `;
   return rows[0] !== undefined;
+};
+
+/**
+ * The four statuses architecture 11.1 names as ending registry access. Everything else (active,
+ * grace, canceling, updates_ended, disputed) still resolves a version: `updatesUntil` is what
+ * actually limits which version a lapsed-updates or disputed license can still install.
+ */
+const deniedLicenseStatuses = new Set(["revoked", "refunded", "charged_back", "ended"]);
+
+export interface ResolvedArtifact {
+  s3Key: string;
+  sha256: string;
+  version: string;
+}
+export type RegistryAccessDenial = "access_denied" | "not_found";
+
+/**
+ * Version resolution (architecture 11.1): the latest version released at or before
+ * `updatesUntil`, or the latest version overall when there is no update window.
+ */
+export const resolveRegistryArtifact = async (
+  sql: Queryable,
+  resolution: ApiTokenResolution,
+  itemName: string
+): Promise<ResolvedArtifact | RegistryAccessDenial> => {
+  if (deniedLicenseStatuses.has(resolution.licenseStatus)) return "access_denied";
+  const deliverables = await sql<{ id: string }[]>`
+    SELECT id FROM deliverables
+    WHERE product_id = ${resolution.productId}::uuid AND type = 'registry'
+      AND config ->> 'itemName' = ${itemName}
+  `;
+  const deliverableId = deliverables[0]?.id;
+  if (deliverableId === undefined) return "not_found";
+  const versions = await sql<ResolvedArtifact[]>`
+    SELECT s3_key AS "s3Key", sha256, version FROM artifact_versions
+    WHERE deliverable_id = ${deliverableId}::uuid
+      AND (${resolution.updatesUntil?.toISOString() ?? null}::timestamptz IS NULL
+        OR released_at <= ${resolution.updatesUntil?.toISOString() ?? null}::timestamptz)
+    ORDER BY released_at DESC LIMIT 1
+  `;
+  return versions[0] ?? "not_found";
 };
