@@ -218,3 +218,31 @@ test("the buyer list shows each license's GitHub handle and access state, and se
   ).json()) as unknown[];
   expect(missing).toHaveLength(0);
 }, 120000);
+
+test("a license timeline includes access changes logged against its seats and grants, and never another license's", async () => {
+  const owner = await signedIn(6n, sellerA, "owner");
+  const otherLicense = "00000000-0000-0000-0000-000000000022";
+  const deliverable = "00000000-0000-0000-0000-000000000032";
+  const seat = "00000000-0000-0000-0000-000000000042";
+  const otherSeat = "00000000-0000-0000-0000-000000000043";
+  const grant = "00000000-0000-0000-0000-000000000052";
+  const otherGrant = "00000000-0000-0000-0000-000000000053";
+  await database.sql`INSERT INTO licenses (id, seller_id, product_id, status, kind, seats_total, purchased_at) VALUES (${otherLicense}::uuid, ${sellerA}::uuid, ${productA}::uuid, 'active', 'one_time', 1, ${now.toISOString()})`;
+  await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${deliverable}::uuid, ${productA}::uuid, 'github_team', '{"organization":"a","teamSlug":"buyers"}'::jsonb)`;
+  await database.sql`INSERT INTO seats (id, license_id) VALUES (${seat}::uuid, ${licenseA}::uuid), (${otherSeat}::uuid, ${otherLicense}::uuid)`;
+  await database.sql`INSERT INTO grants (id, seat_id, deliverable_id, desired, observed) VALUES (${grant}::uuid, ${seat}::uuid, ${deliverable}::uuid, 'present', 'active'), (${otherGrant}::uuid, ${otherSeat}::uuid, ${deliverable}::uuid, 'present', 'active')`;
+  await database.sql`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES
+    ('00000000-0000-0000-0000-000000000061'::uuid, ${sellerA}::uuid, 'grant', ${grant}::uuid, 'active', 'mine: grant', 'system', ${now.toISOString()}),
+    ('00000000-0000-0000-0000-000000000062'::uuid, ${sellerA}::uuid, 'seat', ${seat}::uuid, 'released', 'mine: seat', 'system', ${now.toISOString()}),
+    ('00000000-0000-0000-0000-000000000063'::uuid, ${sellerA}::uuid, 'license', ${licenseA}::uuid, 'revoked', 'mine: license', 'u', ${now.toISOString()}),
+    ('00000000-0000-0000-0000-000000000064'::uuid, ${sellerA}::uuid, 'grant', ${otherGrant}::uuid, 'active', 'other license', 'system', ${now.toISOString()})`;
+
+  const timeline = (await (
+    await request(`/sellers/${sellerA}/licenses/${licenseA}`, owner)
+  ).json()) as { activity: { reason: string }[] };
+  expect(timeline.activity.map((row) => row.reason).sort()).toEqual([
+    "mine: grant",
+    "mine: license",
+    "mine: seat"
+  ]);
+}, 120000);

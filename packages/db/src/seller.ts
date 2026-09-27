@@ -161,9 +161,17 @@ export const sellerLicenseTimeline = async (
     >`SELECT licenses.id, products.name AS "productName", licenses.status FROM licenses JOIN products ON products.id = licenses.product_id WHERE licenses.id = ${licenseId}::uuid AND licenses.seller_id = ${sellerId}::uuid`
   )[0];
   if (!license) throw new NotFoundError("License was not found.");
-  const activity = await sql<
-    { action: string; reason: string; createdAt: Date }[]
-  >`SELECT action, reason, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid AND subject_id = ${licenseId}::uuid ORDER BY created_at DESC`;
+  const activity = await sql<{ action: string; reason: string; createdAt: Date }[]>`
+    SELECT action, reason, created_at AS "createdAt" FROM activity_log
+    WHERE seller_id = ${sellerId}::uuid AND (
+      subject_id = ${licenseId}::uuid
+      OR subject_id IN (SELECT seats.id FROM seats WHERE seats.license_id = ${licenseId}::uuid)
+      OR subject_id IN (
+        SELECT grants.id FROM grants JOIN seats ON seats.id = grants.seat_id
+        WHERE seats.license_id = ${licenseId}::uuid
+      )
+    )
+    ORDER BY created_at DESC`;
   return { license, activity };
 };
 /** Manual access changes only set desired state and enqueue the reconciler. */
