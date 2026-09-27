@@ -33,7 +33,7 @@ Estimates assume one developer working with an AI agent. They are rough.
 | M7 | Beta readiness | Our billing, plan limits, security review, infra, runbooks, staging soak | 5 to 7 days |
 | M8 | Registry delivery | Private shadcn registry, artifacts, update windows, tokens | 6 to 8 days |
 | M9 | Team licenses | Seats, manager, reassignment, license types | 4 to 5 days |
-| M10 | Later phase | Dodo, Creem, Gumroad, personal repos, downloads, leak alerts | planned after beta feedback |
+| M10 | Later phase | Dodo, Creem, Gumroad, leak alerts | planned after beta feedback; plain zip downloads done 2026-09-28, personal-repo delivery resolved via org-move guidance (D-039), no code needed |
 
 **Private beta starts after M7.** M8 onward is shaped by beta feedback.
 
@@ -279,4 +279,6 @@ Read: architecture 11.
 
 ## M10: Later phase (plan after beta)
 
-Candidates, to be ordered by beta feedback: Dodo, Creem and Gumroad adapters; personal repo collaborator mode (D-004); versioned zip downloads with presigned URLs; leak alerts (fingerprint search plus takedown template); buyer home across sellers.
+Candidates, to be ordered by beta feedback: Dodo, Creem and Gumroad adapters; leak alerts (fingerprint search plus takedown template).
+
+Done ahead of beta feedback, alongside M9: versioned zip downloads with presigned URLs (2026-09-28); buyer home across sellers (2026-09-27); personal repo collaborator mode (D-004) resolved without new code, sellers move a personal-account repo into a free organization and use existing team delivery (D-039, 2026-09-28), superseding this candidate's original "collaborator mode" framing.
