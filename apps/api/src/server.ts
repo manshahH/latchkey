@@ -10,13 +10,14 @@ import {
 import { ExternalPermanentError, ExternalTransientError } from "@latchkey/core";
 import { createLocalKms, createToken } from "@latchkey/crypto";
 import { createDatabase, storePlatformBillingEvent } from "@latchkey/db";
-import { createR2ExportStorage } from "@latchkey/delivery";
+import { createR2ArtifactStorage, createR2ExportStorage } from "@latchkey/delivery";
 import { createResendEmailSender } from "@latchkey/email";
 import { Hono } from "hono";
 
 import { createPlatformBillingRoutes } from "./billing.js";
 import { createBuyerApi, type GitHubOAuth } from "./buyer.js";
 import { createProductionApi, createProductionGitHubWebhookApi } from "./index.js";
+import { createRegistryApi } from "./registry.js";
 import { createSellerApi } from "./seller.js";
 
 const bodyAllowed = (method: string | undefined) => method !== "GET" && method !== "HEAD";
@@ -167,6 +168,12 @@ export const startApiServer = (): ReturnType<typeof createServer> => {
     bucket: r2.LATCHKEY_R2_BUCKET,
     secretAccessKey: r2.LATCHKEY_R2_SECRET_ACCESS_KEY
   });
+  const artifactStorage = createR2ArtifactStorage({
+    accessKeyId: r2.LATCHKEY_R2_ACCESS_KEY_ID,
+    accountId: r2.LATCHKEY_R2_ACCOUNT_ID,
+    bucket: r2.LATCHKEY_R2_BUCKET,
+    secretAccessKey: r2.LATCHKEY_R2_SECRET_ACCESS_KEY
+  });
   app.get("/healthz", (context) => context.json({ ok: true }));
   app.route("/", createProductionApi(database.sql, createLocalKms(encryptionKey), now));
   app.route(
@@ -198,6 +205,7 @@ export const startApiServer = (): ReturnType<typeof createServer> => {
     })
   );
   app.route("/", createSellerApi({ exportStorage: storage, now, sql: database.sql }));
+  app.route("/", createRegistryApi({ artifactStorage, now, sql: database.sql }));
   const server = createServer(createNodeRequestHandler(app, now));
   server.listen(hosted.PORT);
   return server;
