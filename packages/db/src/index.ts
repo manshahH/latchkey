@@ -59,7 +59,14 @@ export {
   listApiTokens,
   recordArtifactDrift,
   resolveApiToken,
+  resolveRegistryArtifact,
   revokeApiToken,
   storeArtifactVersion
 } from "./registry.js";
-export type { ApiTokenResolution, ApiTokenSummary, RegistryDeliverableConfig } from "./registry.js";
+export type {
+  ApiTokenResolution,
+  ApiTokenSummary,
+  RegistryAccessDenial,
+  RegistryDeliverableConfig,
+  ResolvedArtifact
+} from "./registry.js";

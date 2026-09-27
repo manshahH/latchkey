@@ -13,9 +13,15 @@ export class ValidationError extends LatchkeyError {
   readonly statusCode = 422;
 }
 
+/** Architecture section 12: AuthError covers both no/bad credentials (401) and a valid, out-of-rights one (403). */
 export class AuthError extends LatchkeyError {
   readonly code = "auth_error";
-  readonly statusCode = 401;
+  readonly statusCode: 401 | 403;
+
+  public constructor(message: string, statusCode: 401 | 403 = 401) {
+    super(message);
+    this.statusCode = statusCode;
+  }
 }
 
 export class NotFoundError extends LatchkeyError {
