@@ -193,6 +193,7 @@ export const startApiServer = (): ReturnType<typeof createServer> => {
     createBuyerApi({
       baseUrl: hosted.LATCHKEY_PUBLIC_BASE_URL,
       email,
+      exportStorage: storage,
       now,
       oauth: createGitHubOAuth({
         clientId: hosted.LATCHKEY_GITHUB_OAUTH_CLIENT_ID,
