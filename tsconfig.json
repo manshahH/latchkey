@@ -19,5 +19,6 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  "include": ["apps/*/src/**/*.ts", "packages/*/src/**/*.ts", "scripts/**/*.ts"]
+  "include": ["apps/*/src/**/*.ts", "packages/*/src/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["apps/web/**"]
 }

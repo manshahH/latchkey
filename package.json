@@ -9,8 +9,8 @@
     "pnpm": ">=11.0.0"
   },
   "scripts": {
-    "lint": "eslint --no-error-on-unmatched-pattern \"apps/**/*.{js,mjs,cjs,ts,mts,cts}\" \"packages/**/*.{js,mjs,cjs,ts,mts,cts}\" \"infra/**/*.{js,mjs,cjs,ts,mts,cts}\" \"scripts/**/*.{js,mjs,cjs,ts,mts,cts}\"",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "lint": "eslint --no-error-on-unmatched-pattern \"apps/**/*.{js,mjs,cjs,ts,mts,cts,tsx}\" \"packages/**/*.{js,mjs,cjs,ts,mts,cts}\" \"infra/**/*.{js,mjs,cjs,ts,mts,cts}\" \"scripts/**/*.{js,mjs,cjs,ts,mts,cts}\"",
+    "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project apps/web/tsconfig.json",
     "test": "vitest run",
     "test:core:coverage": "vitest run packages/core/src --coverage.enabled --coverage.provider=v8 --coverage.include=packages/core/src/**/*.ts --coverage.exclude=packages/core/src/**/*.test.ts --coverage.thresholds.lines=95",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -18,7 +18,7 @@
     "test:github-live": "tsx scripts/github-live.ts",
     "test:github-live:invite": "tsx scripts/github-live-invite.ts",
     "test:github-live:verify": "tsx scripts/github-live-verify.ts",
-    "build": "tsc --project tsconfig.build.json",
+    "build": "tsc --project tsconfig.build.json && pnpm --filter @latchkey/web build",
     "db:migrate": "tsx packages/db/src/cli.ts migrate",
     "db:rollback": "tsx packages/db/src/cli.ts rollback",
     "db:reset": "tsx packages/db/src/cli.ts reset",
