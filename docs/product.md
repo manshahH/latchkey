@@ -74,12 +74,25 @@ Three things, in this order:
 Aisha sells a Next.js starter kit for $149.
 
 1. She signs in to Latchkey with GitHub.
-2. She connects her GitHub organization. Latchkey checks it and warns her if GitHub would charge her extra for every buyer, and tells her how to avoid that.
+2. She connects her GitHub organization. Latchkey checks it and warns her if GitHub would charge her extra for every buyer, and tells her how to avoid that. (Her repo lives under her own personal GitHub username, not an organization, so Latchkey first walks her through moving it into a free organization she creates and owns. See "If your code lives under your personal account" below.)
 3. She connects her payment company (Paddle). Latchkey shows her exactly what to paste where.
 4. She creates a product: "Starter Kit Pro", linked to her private repo, with "1 year of updates".
 5. Latchkey runs a **test purchase and a test refund** with her, so she can see access being given and removed before any real buyer arrives.
 6. She shares her normal checkout link.
 7. From then on, her dashboard shows every buyer, whether their access is working, and anything that needs her attention. Most days, nothing needs her attention.
+
+### If your code lives under your personal account
+
+We only connect to GitHub organizations, not personal accounts. This keeps buyer access simple and safe (one team per product, nothing more), and it means we never ask for permission to delete or rename your repo, only to manage who is on a team.
+
+If your repo is under your own personal GitHub username, move it into a free organization you create and own. This takes a few minutes and you do not lose anything: your code, commit history, issues, and stars all come with it.
+
+1. On GitHub, click your profile picture (top right), then **Settings**, then **Organizations**, then **New organization**. Pick the free plan.
+2. Open your repo, go to its **Settings**, scroll to the **Danger Zone**, and click **Transfer**.
+3. Choose the organization you just created as the new owner, then type the repo name to confirm.
+4. Connect that organization to Latchkey and carry on with step 2 above.
+
+Your repo can still be private inside the organization. You stay the owner. Nothing about how your code works changes, only who it lives under on GitHub.
 
 ## 7. How it works: the buyer's story
 
