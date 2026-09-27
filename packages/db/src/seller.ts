@@ -209,8 +209,23 @@ export const setManualAccess = async (
 };
 export const listSellerDrift = async (sql: Queryable, sellerId: string) =>
   sql<
-    { id: string; kind: string; details: Record<string, unknown>; status: string }[]
-  >`SELECT id, kind, details, status FROM drift_items WHERE seller_id = ${sellerId}::uuid ORDER BY created_at DESC`;
+    {
+      id: string;
+      kind: string;
+      details: Record<string, unknown>;
+      status: string;
+      licenseId: string | null;
+      githubLogin: string | null;
+    }[]
+  >`
+    SELECT drift_items.id, drift_items.kind, drift_items.details, drift_items.status,
+      seats.license_id AS "licenseId", users.github_login AS "githubLogin"
+    FROM drift_items
+    LEFT JOIN grants ON grants.id = drift_items.grant_id
+    LEFT JOIN seats ON seats.id = grants.seat_id
+    LEFT JOIN users ON users.id = seats.user_id
+    WHERE drift_items.seller_id = ${sellerId}::uuid
+    ORDER BY drift_items.created_at DESC`;
 export const resolveSellerDrift = async (
   sql: Sql,
   sellerId: string,

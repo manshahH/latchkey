@@ -246,3 +246,32 @@ test("a license timeline includes access changes logged against its seats and gr
     "mine: seat"
   ]);
 }, 120000);
+
+test("a drift item about one buyer names them and links to their license, and a seller-wide one does not", async () => {
+  const owner = await signedIn(8n, sellerA, "owner");
+  const buyer = await createBuyerSession(
+    database.sql,
+    { githubUserId: 888n, login: "jt-builds" },
+    `session-888-${"x".repeat(40)}`,
+    `csrf-888-${"x".repeat(40)}`,
+    now
+  );
+  const deliverable = "00000000-0000-0000-0000-000000000033";
+  const seat = "00000000-0000-0000-0000-000000000044";
+  const grant = "00000000-0000-0000-0000-000000000054";
+  await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${deliverable}::uuid, ${productA}::uuid, 'github_team', '{"organization":"a","teamSlug":"buyers"}'::jsonb)`;
+  await database.sql`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${seat}::uuid, ${licenseA}::uuid, ${buyer.userId}::uuid, ${now.toISOString()})`;
+  await database.sql`INSERT INTO grants (id, seat_id, deliverable_id, desired, observed) VALUES (${grant}::uuid, ${seat}::uuid, ${deliverable}::uuid, 'present', 'removed')`;
+  await database.sql`INSERT INTO drift_items (id, seller_id, grant_id, kind, details, created_at) VALUES ('00000000-0000-0000-0000-000000000071'::uuid, ${sellerA}::uuid, ${grant}::uuid, 'removed_externally', '{}'::jsonb, ${now.toISOString()})`;
+  await database.sql`INSERT INTO drift_items (id, seller_id, kind, details, created_at) VALUES ('00000000-0000-0000-0000-000000000072'::uuid, ${sellerA}::uuid, 'unmapped_product', '{}'::jsonb, ${new Date(now.getTime() - 1000).toISOString()})`;
+
+  const drift = (await (await request(`/sellers/${sellerA}/drift`, owner)).json()) as unknown[];
+  expect(drift).toEqual([
+    expect.objectContaining({
+      kind: "removed_externally",
+      licenseId: licenseA,
+      githubLogin: "jt-builds"
+    }),
+    expect.objectContaining({ kind: "unmapped_product", licenseId: null, githubLogin: null })
+  ]);
+}, 120000);
