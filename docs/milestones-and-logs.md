@@ -17,8 +17,8 @@
 | M4 Payment adapters | DONE | 2026-09-19 | 2026-09-19 | Owner-scoped Paddle and Stripe adapters, fixtures, backfill, mapping, and sandbox purchase/refund proof complete. |
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
 | M6 Seller dashboard | DONE | 2026-09-21 | 2026-09-22 | Sandbox purchase/refund webhooks, GitHub access and safe team/org revocation verified; temporary provider resources removed; `pnpm check` passed. |
-| M7 Beta readiness | IN PROGRESS | 2026-09-22 | | Free-beta billing switch, local security pass, invariant-to-test table, and a full local sandbox purchase/claim/email proof done. Cloudflare deployment and legal pages deliberately deferred to the end (D-034, D-035, D-036). |
-| M8 Registry delivery | NOT STARTED | | | |
+| M7 Beta readiness | IN PROGRESS, deployment paused | 2026-09-22 | | Everything buildable locally is done (see the M7 remaining-work list below). Cloudflare deployment deliberately paused until the owner is ready (D-034); resume there, do not start M8's registry deploy pipeline as a substitute. |
+| M8 Registry delivery | IN PROGRESS | 2026-09-27 | | Started. Task 1 (Request Contents: read GitHub App permission) needs owner approval before any code that reads repository contents. |
 | M9 Team licenses | NOT STARTED | | | |
 | M10 Later phase | NOT PLANNED | | | Plan after beta feedback |
 
@@ -33,6 +33,18 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **What exists:** M0 through M6 are complete. M7 has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence (off by default, D-033), plan-usage evaluation, required operator runbooks, a verified invariant-to-test table, and a passed dependency/secrets security pass. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain every value the local stack needs. A full sandbox purchase, an unmapped-product reprocess, a claim, and a real Resend email delivery have all been proven against the live local API and worker running on the owner's machine.
 **Next action:** nothing further is buildable locally for M7. What remains needs either the owner's Cloudflare Workers Paid plan (D-034, deliberately deferred by the owner) or legal text before the real public launch (D-035, also deferred).
 **Open blockers:** Cloudflare Workers Paid plan for webhooks, deploy, restore drill, alarm test, and 72-hour soak; auth/claim/resend rate limiting, which is Cloudflare Rate Limiting rules configured at deploy time (D-036); a sending domain for Resend before real buyers (not just the owner) get email; legal text before the real public launch (not the private beta, D-035); final owner beta approval.
+**M7 remaining work (all paused, owner said leave deployment for now):**
+1. Fund and configure the Cloudflare Workers Paid plan, then follow `docs/m7-supabase-cloudflare-setup.md` to upload secrets, dry-run validate, and deploy staging from `main`.
+2. Point the GitHub App webhook and OAuth callback at the real staging URL once it exists.
+3. Confirm `/healthz`, one signed GitHub webhook, and one signed sandbox purchase/refund against the deployed staging environment (the local proof from 2026-09-23 and 2026-09-27 does not substitute for this, since GitHub cannot reach a local machine).
+4. Configure Cloudflare Rate Limiting rules for auth, claim, and resend (D-036).
+5. Restore-from-backup drill on staging, timed in the log.
+6. Alarm test: force a signature-failure spike and confirm the alarm fires.
+7. 72-hour staging soak: synthetic purchases, refunds, disputes, renames, uninstalls, and GitHub error injection on a schedule; log a report with counts and zero stuck grants older than 1 hour past their next attempt.
+8. A verified Resend sending domain, before real buyers (not just the owner) get email.
+9. Owner-provided legal text (Terms, Privacy Policy, data processing notes), required before the real public launch, not before this private beta (D-035).
+10. Owner's final beta approval: the owner reviews the soak report, restore drill, and alarm test, then decides real sellers can be invited (`docs/implementation-plan.md`'s M7 beta gate).
+
 **Waiting on owner:** Polar and Lemon Squeezy remain deferred until requested.
 **Known debt:** automated test-count, hosted CI, and em dash guards are deferred from M0 by owner decision D-023.
 **Test count floor (`LATCHKEY_MIN_TESTS`):** deferred from M0 by D-023.
@@ -343,6 +355,15 @@ Format (newest first):
 - Not done / deferred: the owner still needs to click through the real GitHub OAuth consent screen in a browser; I could not do that from here since it needs the owner's GitHub login. Everything else from the previous entry (Cloudflare hosting, webhooks, soak) is still waiting on D-034.
 - Docs updated: architecture section 13, `m7-supabase-cloudflare-setup.md`, this work log.
 - Next step: owner retries GitHub sign-in at `http://localhost:8080/auth/github?returnTo=/purchases` with the restarted server.
+### 2026-09-27: M7 remaining-work list, pause deployment, start M8
+- Branch / commits: `m7/security-pass-and-sandbox-proof` (continuing PR #2, not yet merged).
+- Goal: the owner asked to write down what is left on M7 in one place, leave Cloudflare deployment paused for now, and move on to the next milestone.
+- Done: added a numbered M7 remaining-work list to the current state section (the ten items that need either Cloudflare hosting, a sending domain, or owner-provided legal text, in the order the M7 plan expects them). Set the status board to make clear M7 is paused on deployment by the owner's choice, not blocked or abandoned, and that M8 has started.
+- Decisions made: none new.
+- Not done / deferred: everything in the new M7 list, by the owner's own instruction.
+- Docs updated: status board, current state (this entry).
+- Next step: M8. Task 1 (`Request Contents: read` GitHub App permission) needs owner approval before any code reads repository contents, per `CLAUDE.md`'s stop-and-ask list ("Changing GitHub App permissions"). Asking now.
+
 ### 2026-09-27: M7 local sandbox purchase, claim, and email proof
 - Branch / commits: `main`. Uncommitted at time of writing.
 - Goal: drive a real sandbox purchase end to end through the actually-running API and worker processes (not the test harness) against Supabase staging, so the owner sees their own product show up under "My purchases", and confirm the Resend email pipeline works live for the first time.
