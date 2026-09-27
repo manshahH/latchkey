@@ -10,6 +10,11 @@ export interface TeamTarget {
   organization: string;
   teamSlug: string;
 }
+export interface RepositoryTarget {
+  installationId?: bigint;
+  organization: string;
+  repo: string;
+}
 export interface GitHubCall {
   action:
     | "invite_to_team"
@@ -38,6 +43,8 @@ export interface GitHubClient {
     installationId?: bigint
   ): Awaitable<boolean>;
   getPendingInvitation(target: TeamTarget, userId: bigint): Awaitable<boolean>;
+  /** Null means the file does not exist at that ref, or the ref itself does not exist. */
+  getRepositoryFile(target: RepositoryTarget, path: string, ref: string): Awaitable<string | null>;
   getTeamMembership(target: TeamTarget, userId: bigint): Awaitable<boolean>;
   inviteToTeam(target: TeamTarget, userId: bigint): Awaitable<void>;
   listTeamMembers(target: TeamTarget): Awaitable<bigint[]>;
@@ -192,6 +199,30 @@ export class GitHubAppClient implements GitHubClient {
     return membership?.state === "pending";
   }
 
+  public async getRepositoryFile(
+    target: RepositoryTarget,
+    path: string,
+    ref: string
+  ): Promise<string | null> {
+    const installationId = this.installationId(target);
+    const encodedPath = path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const file = await this.request<{ content?: string; encoding?: string; type?: string } | null>(
+      installationId,
+      {
+        allowNotFound: true,
+        method: "GET",
+        path: `/repos/${encodeURIComponent(target.organization)}/${encodeURIComponent(target.repo)}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`
+      }
+    );
+    if (file === null || file.type !== "file" || typeof file.content !== "string") return null;
+    return Buffer.from(file.content, file.encoding === "base64" ? "base64" : "utf8").toString(
+      "utf8"
+    );
+  }
+
   public async getTeamMembership(target: TeamTarget, userId: bigint): Promise<boolean> {
     const installationId = this.installationId(target);
     const login = await this.loginFor(installationId, userId);
@@ -316,7 +347,7 @@ export class GitHubAppClient implements GitHubClient {
     });
   }
 
-  private installationId(target: TeamTarget): bigint {
+  private installationId(target: { installationId?: bigint }): bigint {
     if (target.installationId === undefined)
       throw new ExternalPermanentError("GitHub installation is not linked to this seller.");
     return target.installationId;
@@ -441,6 +472,8 @@ export class FakeGitHub implements GitHubClient {
   private readonly inviteTimes: Date[] = [];
   private readonly logins = new Map<bigint, string>();
   private readonly organizations = new Map<string, OrganizationState>();
+  private readonly repositoryFiles = new Map<string, string>();
+  private readonly repositoryFileFailures: GitHubFailure[] = [];
 
   public constructor(
     private readonly clock: Clock = { now: () => new Date(0) },
@@ -565,6 +598,33 @@ export class FakeGitHub implements GitHubClient {
     this.record("list_user_teams", { organization }, userId);
     const state = this.organization(organization);
     return [...state.teams].flatMap(([slug, members]) => (members.has(userId) ? [slug] : []));
+  }
+
+  /** Test setup: makes a file readable at (organization, repo, ref, path). Absent means 404. */
+  public setRepositoryFile(
+    target: RepositoryTarget,
+    ref: string,
+    path: string,
+    content: string
+  ): void {
+    this.repositoryFiles.set(this.repositoryFileKey(target, ref, path), content);
+  }
+
+  public failNextRepositoryFile(failure: GitHubFailure): void {
+    this.repositoryFileFailures.push(failure);
+  }
+
+  public getRepositoryFile(target: RepositoryTarget, path: string, ref: string): string | null {
+    const failure = this.repositoryFileFailures.shift();
+    if (failure === "not_found") return null;
+    if (failure === "rate_limited") throw new ExternalTransientError("GitHub rate limit reached.");
+    if (failure === "server_error")
+      throw new ExternalTransientError("GitHub is temporarily unavailable.");
+    return this.repositoryFiles.get(this.repositoryFileKey(target, ref, path)) ?? null;
+  }
+
+  private repositoryFileKey(target: RepositoryTarget, ref: string, path: string): string {
+    return `${target.organization}/${target.repo}@${ref}:${path}`;
   }
 
   private organization(name: string): OrganizationState {
