@@ -175,3 +175,46 @@ test("an admin can set a product's license type and terms; a viewer cannot", asy
     >`SELECT license_type AS "licenseType", license_terms_template AS "licenseTermsTemplate" FROM products WHERE id = ${productA}::uuid`
   ).toEqual([{ licenseType: "per-seat", licenseTermsTemplate: "One seat per teammate." }]);
 }, 120_000);
+
+test("the buyer list shows each license's GitHub handle and access state, and search finds a handle", async () => {
+  const owner = await signedIn(5n, sellerA, "owner");
+  const buyer = await createBuyerSession(
+    database.sql,
+    { githubUserId: 777n, login: "bilal-k" },
+    `session-777-${"x".repeat(40)}`,
+    `csrf-777-${"x".repeat(40)}`,
+    now
+  );
+  const deliverable = "00000000-0000-0000-0000-000000000031";
+  const seat = "00000000-0000-0000-0000-000000000041";
+  const grant = "00000000-0000-0000-0000-000000000051";
+  await database.sql`INSERT INTO deliverables (id, product_id, type, config) VALUES (${deliverable}::uuid, ${productA}::uuid, 'github_team', '{"organization":"a","teamSlug":"buyers"}'::jsonb)`;
+  await database.sql`INSERT INTO seats (id, license_id, user_id, assigned_at) VALUES (${seat}::uuid, ${licenseA}::uuid, ${buyer.userId}::uuid, ${now.toISOString()})`;
+  await database.sql`INSERT INTO grants (id, seat_id, deliverable_id, desired, observed) VALUES (${grant}::uuid, ${seat}::uuid, ${deliverable}::uuid, 'present', 'active')`;
+
+  const listed = (await (await request(`/sellers/${sellerA}/licenses`, owner)).json()) as unknown[];
+  expect(listed).toEqual([
+    expect.objectContaining({
+      githubLogin: "bilal-k",
+      id: licenseA,
+      observed: "active",
+      seatsClaimed: 1,
+      seatsTotal: 1
+    })
+  ]);
+
+  await database.sql`UPDATE grants SET observed = 'needs_attention' WHERE id = ${grant}::uuid`;
+  const attention = (await (await request(`/sellers/${sellerA}/licenses`, owner)).json()) as {
+    observed: string;
+  }[];
+  expect(attention[0]?.observed).toBe("needs_attention");
+
+  const found = (await (
+    await request(`/sellers/${sellerA}/licenses?q=bilal`, owner)
+  ).json()) as unknown[];
+  expect(found).toHaveLength(1);
+  const missing = (await (
+    await request(`/sellers/${sellerA}/licenses?q=nobody-here`, owner)
+  ).json()) as unknown[];
+  expect(missing).toHaveLength(0);
+}, 120000);

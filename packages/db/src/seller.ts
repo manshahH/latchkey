@@ -123,9 +123,33 @@ export const listSellerLicenses = async (
     status: string;
     purchaseEmail: string | null;
     purchasedAt: Date;
+    githubLogin: string | null;
+    seatsTotal: number;
+    seatsClaimed: number;
+    observed: string;
   }[]
 >`
- SELECT licenses.id, products.name AS "productName", licenses.status, licenses.purchase_email AS "purchaseEmail", licenses.purchased_at AS "purchasedAt" FROM licenses JOIN products ON products.id = licenses.product_id WHERE licenses.seller_id = ${sellerId}::uuid AND (${status ?? null}::text IS NULL OR licenses.status = ${status ?? null}) AND (${query ?? null}::text IS NULL OR licenses.purchase_email ILIKE ${query === undefined ? null : `%${query}%`} OR products.name ILIKE ${query === undefined ? null : `%${query}%`}) ORDER BY licenses.purchased_at DESC`;
+ SELECT licenses.id, products.name AS "productName", licenses.status,
+   licenses.purchase_email AS "purchaseEmail", licenses.purchased_at AS "purchasedAt",
+   MIN(users.github_login) FILTER (WHERE seats.released_at IS NULL) AS "githubLogin",
+   licenses.seats_total AS "seatsTotal",
+   COUNT(DISTINCT seats.id) FILTER (WHERE seats.user_id IS NOT NULL AND seats.released_at IS NULL)::integer AS "seatsClaimed",
+   CASE WHEN BOOL_OR(grants.observed = 'needs_attention') THEN 'needs_attention'
+     WHEN BOOL_OR(grants.observed = 'error_retrying') THEN 'error_retrying'
+     WHEN BOOL_OR(grants.observed = 'active') THEN 'active'
+     WHEN BOOL_OR(grants.observed = 'invited') THEN 'invited'
+     WHEN BOOL_OR(grants.observed = 'queued') THEN 'queued'
+     WHEN BOOL_OR(grants.observed = 'removed') THEN 'removed'
+     ELSE 'none' END AS observed
+ FROM licenses JOIN products ON products.id = licenses.product_id
+ LEFT JOIN seats ON seats.license_id = licenses.id
+ LEFT JOIN users ON users.id = seats.user_id
+ LEFT JOIN grants ON grants.seat_id = seats.id
+ WHERE licenses.seller_id = ${sellerId}::uuid
+   AND (${status ?? null}::text IS NULL OR licenses.status = ${status ?? null})
+   AND (${query ?? null}::text IS NULL OR licenses.purchase_email ILIKE ${query === undefined ? null : `%${query}%`} OR products.name ILIKE ${query === undefined ? null : `%${query}%`} OR users.github_login ILIKE ${query === undefined ? null : `%${query}%`})
+ GROUP BY licenses.id, products.name
+ ORDER BY licenses.purchased_at DESC`;
 export const sellerLicenseTimeline = async (
   sql: Queryable,
   sellerId: string,

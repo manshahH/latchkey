@@ -44,13 +44,14 @@ export {
   getBuyerAccess,
   getBuyerSession,
   getClaimDetails,
+  getViewer,
   listBuyerPurchases,
   releaseInactiveSeat,
   replaceClaimForResend,
   requireBuyerSession,
   reserveEmail
 } from "./buyer.js";
-export type { BuyerAccess, BuyerIdentity, BuyerSession, ClaimDetails } from "./buyer.js";
+export type { BuyerAccess, BuyerIdentity, BuyerSession, ClaimDetails, Viewer } from "./buyer.js";
 export * from "./seller.js";
 export {
   artifactVersionExists,
