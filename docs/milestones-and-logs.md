@@ -261,6 +261,15 @@ Format:
 - Alternatives: block all further beta progress until legal text exists (stalls the beta with no real users yet); publish placeholder legal text now (worse than no page, and not the owner's to decide alone under section 10).
 - Consequences: `docs/implementation-plan.md` M7 task 6 is marked deferred to the real launch. No page collecting buyer or seller data may go out to anyone the owner has not personally invited until this is revisited.
 
+### D-037: Add Contents (repository, read) and the release webhook for M8
+- Date: 2026-09-27
+- Status: Accepted
+- Decided by: owner
+- Context: M8 (registry delivery) needs the GitHub App to read a seller's repository contents (to fetch release tags and build registry item JSON) and to receive `release` webhook events. `architecture.md` section 8.1 says M3 deliberately did not request this, and any permission change is a decision entry requiring owner approval, since existing installations must re-approve. The owner was asked directly, with the trade-off that a live change is low risk right now because there are no real sellers yet to disrupt.
+- Decision: add `Contents: Read-only` (repository permission) and subscribe to the `release` webhook event on the same GitHub App used for staging and testing. Approved now, before any real sellers exist, rather than waiting until after the beta launches.
+- Alternatives: wait until after the private beta has real sellers (avoids ever asking anyone to re-approve, but blocks M8 entirely until then); build only the parts of M8 that do not need this permission and pause the rest (kept as a fallback if the owner had said no; not needed since the owner approved).
+- Consequences: `docs/architecture.md` section 8.1 updated. The owner must add the permission and webhook event in the GitHub App's own settings page (Claude Code cannot change a GitHub App's permission scopes through the API; only the app's manager can, in GitHub's UI). M8 code that reads repository contents cannot be live-tested until that is done, but can be built and tested against `FakeGitHub` in the meantime, the same pattern used throughout M1 through M7. This also means M8 starts before the M7 beta gate, ahead of the implementation plan's original "Private beta starts after M7. M8 onward is shaped by beta feedback" ordering; the owner chose to move on to M8 while M7's deployment is paused, so recording this explicitly here to avoid confusion later about why M8 has work before M7's beta gate closed.
+
 ### D-036: Rate limiting for auth, claim, and resend waits for the Cloudflare deploy
 - Date: 2026-09-27
 - Status: Accepted
