@@ -70,3 +70,16 @@ export type {
   RegistryDeliverableConfig,
   ResolvedArtifact
 } from "./registry.js";
+export {
+  applySeatCountChange,
+  createManagerClaimLink,
+  createSeatUsernameInvite,
+  getPendingSeatUsernameInvite,
+  listLicenseSeats,
+  listSeatUsernameInvites,
+  markSeatUsernameInviteFailed,
+  releaseManagedSeat,
+  requireLicenseManager,
+  resolveSeatUsernameInvite
+} from "./seats.js";
+export type { LicenseSeatSummary, SeatUsernameInvite } from "./seats.js";

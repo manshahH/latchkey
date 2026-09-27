@@ -9,6 +9,7 @@ import {
 } from "@latchkey/core";
 import { createClaim } from "./buyer.js";
 import { enqueueJob } from "./repositories.js";
+import { applySeatCountChange } from "./seats.js";
 
 interface EventRow {
   id: string;
@@ -123,7 +124,15 @@ export const processStoredEvent = async (
       newLicenseBuyerUserId = buyerUserId;
       newPurchaseEmail = purchaseEmail;
     }
-    await transaction`INSERT INTO license_events (id, license_id, external_event_id, type, occurred_at, received_at, data) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${externalEvent.id}::uuid, ${event.type}, ${event.occurredAt.toISOString()}, ${externalEvent.received_at}, ${JSON.stringify(event.data)}) ON CONFLICT (license_id, external_event_id) DO NOTHING`;
+    const insertedEvent = await transaction<{ id: string }[]>`
+      INSERT INTO license_events (id, license_id, external_event_id, type, occurred_at, received_at, data) VALUES (${randomUUID()}::uuid, ${licenseId}::uuid, ${externalEvent.id}::uuid, ${event.type}, ${event.occurredAt.toISOString()}, ${externalEvent.received_at}, ${JSON.stringify(event.data)}) ON CONFLICT (license_id, external_event_id) DO NOTHING RETURNING id
+    `;
+    // A seat-count change is not a pure re-derivation like status is: it must apply exactly once
+    // per unique event, not on every re-fold a later, unrelated event triggers, so it is gated on
+    // this specific event having just been newly inserted (the same one-shot pattern createdLicense
+    // already uses below for claim creation).
+    if (insertedEvent[0] !== undefined && event.type === "SeatsChanged")
+      await applySeatCountChange(transaction, licenseId, event.data.seats, now);
     const rows = await transaction<
       {
         id: string;
