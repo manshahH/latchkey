@@ -214,24 +214,47 @@ export const storeArtifactVersion = async (
  * grace, canceling, updates_ended, disputed) still resolves a version: `updatesUntil` is what
  * actually limits which version a lapsed-updates or disputed license can still install.
  */
-const deniedLicenseStatuses = new Set(["revoked", "refunded", "charged_back", "ended"]);
+/**
+ * The four statuses architecture 11.1 names as ending access to a built artifact (registry item
+ * or download alike). Shared so a license is never judged by two different rules depending on
+ * which delivery type is asking.
+ */
+export const deniedLicenseStatuses = new Set(["revoked", "refunded", "charged_back", "ended"]);
 
 export interface ResolvedArtifact {
   s3Key: string;
   sha256: string;
   version: string;
 }
-export type RegistryAccessDenial = "access_denied" | "not_found";
+export type ArtifactAccessDenial = "access_denied" | "not_found";
+export type RegistryAccessDenial = ArtifactAccessDenial;
 
 /**
  * Version resolution (architecture 11.1): the latest version released at or before
- * `updatesUntil`, or the latest version overall when there is no update window.
+ * `updatesUntil`, or the latest version overall when there is no update window. Shared by the
+ * registry endpoint (bearer token) and buyer downloads (session), so "which version do they get"
+ * is answered exactly once.
  */
+export const getLatestArtifactVersion = async (
+  sql: Queryable,
+  deliverableId: string,
+  updatesUntil: Date | null
+): Promise<ResolvedArtifact | null> => {
+  const versions = await sql<ResolvedArtifact[]>`
+    SELECT s3_key AS "s3Key", sha256, version FROM artifact_versions
+    WHERE deliverable_id = ${deliverableId}::uuid
+      AND (${updatesUntil?.toISOString() ?? null}::timestamptz IS NULL
+        OR released_at <= ${updatesUntil?.toISOString() ?? null}::timestamptz)
+    ORDER BY released_at DESC LIMIT 1
+  `;
+  return versions[0] ?? null;
+};
+
 export const resolveRegistryArtifact = async (
   sql: Queryable,
   resolution: ApiTokenResolution,
   itemName: string
-): Promise<ResolvedArtifact | RegistryAccessDenial> => {
+): Promise<ResolvedArtifact | ArtifactAccessDenial> => {
   if (deniedLicenseStatuses.has(resolution.licenseStatus)) return "access_denied";
   const deliverables = await sql<{ id: string }[]>`
     SELECT id FROM deliverables
@@ -240,12 +263,6 @@ export const resolveRegistryArtifact = async (
   `;
   const deliverableId = deliverables[0]?.id;
   if (deliverableId === undefined) return "not_found";
-  const versions = await sql<ResolvedArtifact[]>`
-    SELECT s3_key AS "s3Key", sha256, version FROM artifact_versions
-    WHERE deliverable_id = ${deliverableId}::uuid
-      AND (${resolution.updatesUntil?.toISOString() ?? null}::timestamptz IS NULL
-        OR released_at <= ${resolution.updatesUntil?.toISOString() ?? null}::timestamptz)
-    ORDER BY released_at DESC LIMIT 1
-  `;
-  return versions[0] ?? "not_found";
+  const version = await getLatestArtifactVersion(sql, deliverableId, resolution.updatesUntil);
+  return version ?? "not_found";
 };

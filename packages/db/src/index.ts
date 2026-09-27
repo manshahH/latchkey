@@ -55,6 +55,8 @@ export * from "./seller.js";
 export {
   artifactVersionExists,
   createApiToken,
+  deniedLicenseStatuses,
+  getLatestArtifactVersion,
   getRegistryDeliverableConfig,
   listApiTokens,
   recordArtifactDrift,
@@ -66,6 +68,7 @@ export {
 export type {
   ApiTokenResolution,
   ApiTokenSummary,
+  ArtifactAccessDenial,
   RegistryAccessDenial,
   RegistryDeliverableConfig,
   ResolvedArtifact
@@ -83,3 +86,5 @@ export {
   resolveSeatUsernameInvite
 } from "./seats.js";
 export type { LicenseSeatSummary, SeatUsernameInvite } from "./seats.js";
+export { getDownloadDeliverableConfig, resolveDownloadForBuyer } from "./downloads.js";
+export type { DownloadAccessDenial, DownloadDeliverableConfig } from "./downloads.js";
