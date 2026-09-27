@@ -209,6 +209,12 @@ test("the buyer list shows each license's GitHub handle and access state, and se
   }[];
   expect(attention[0]?.observed).toBe("needs_attention");
 
+  await database.sql`UPDATE grants SET observed = 'removed_externally' WHERE id = ${grant}::uuid`;
+  const removedByHand = (await (await request(`/sellers/${sellerA}/licenses`, owner)).json()) as {
+    observed: string;
+  }[];
+  expect(removedByHand[0]?.observed).toBe("needs_attention");
+
   const found = (await (
     await request(`/sellers/${sellerA}/licenses?q=bilal`, owner)
   ).json()) as unknown[];

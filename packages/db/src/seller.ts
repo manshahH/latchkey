@@ -134,12 +134,12 @@ export const listSellerLicenses = async (
    MIN(users.github_login) FILTER (WHERE seats.released_at IS NULL) AS "githubLogin",
    licenses.seats_total AS "seatsTotal",
    COUNT(DISTINCT seats.id) FILTER (WHERE seats.user_id IS NOT NULL AND seats.released_at IS NULL)::integer AS "seatsClaimed",
-   CASE WHEN BOOL_OR(grants.observed = 'needs_attention') THEN 'needs_attention'
+   CASE WHEN BOOL_OR(grants.observed IN ('needs_attention', 'removed_externally', 'invite_failed')) THEN 'needs_attention'
      WHEN BOOL_OR(grants.observed = 'error_retrying') THEN 'error_retrying'
      WHEN BOOL_OR(grants.observed = 'active') THEN 'active'
-     WHEN BOOL_OR(grants.observed = 'invited') THEN 'invited'
+     WHEN BOOL_OR(grants.observed IN ('invited', 'inviting', 'invite_expired')) THEN 'invited'
      WHEN BOOL_OR(grants.observed = 'queued') THEN 'queued'
-     WHEN BOOL_OR(grants.observed = 'removed') THEN 'removed'
+     WHEN BOOL_OR(grants.observed IN ('removed', 'removing')) THEN 'removed'
      ELSE 'none' END AS observed
  FROM licenses JOIN products ON products.id = licenses.product_id
  LEFT JOIN seats ON seats.license_id = licenses.id
