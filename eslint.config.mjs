@@ -40,7 +40,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
+    files: ["**/*.{js,mjs,cjs,ts,mts,cts,tsx}"],
     languageOptions: {
       globals: {
         ...globals.node
@@ -84,6 +84,17 @@ export default tseslint.config(
     files: ["apps/api/**/*.{js,mjs,cjs,ts,mts,cts}"],
     rules: {
       "import/no-extraneous-dependencies": externalDependencyRule(workspaceManifest("apps/api"))
+    }
+  },
+  {
+    files: ["apps/web/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser
+      }
+    },
+    rules: {
+      "import/no-extraneous-dependencies": externalDependencyRule(workspaceManifest("apps/web"))
     }
   },
   {

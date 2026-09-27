@@ -15,6 +15,7 @@ import {
   getBuyerAccess,
   getBuyerSession,
   getClaimDetails,
+  getViewer,
   listApiTokens,
   listBuyerPurchases,
   listLicenseSeats,
@@ -137,9 +138,31 @@ export const createBuyerApi = (options: BuyerApiOptions) => {
     deleteCookie(context, "lk_csrf", csrfOptions);
     return context.json({ loggedOut: true });
   });
+  app.get("/me", async (context) => {
+    const userId = await requireBuyerSession(
+      options.sql,
+      getCookie(context, "lk_session"),
+      undefined,
+      options.now(),
+      false
+    );
+    return context.json(await getViewer(options.sql, userId));
+  });
   app.get("/claim/:token", async (context) => {
     const token = TokenSchema.parse(context.req.param("token"));
     const details = await getClaimDetails(options.sql, token, options.now());
+    if ((context.req.header("accept") ?? "").includes("application/json")) {
+      const session = getCookie(context, "lk_session");
+      const signedIn =
+        session !== undefined &&
+        (await getBuyerSession(options.sql, session, options.now())) !== null;
+      return context.json({
+        expiresAt: details.expiresAt.toISOString(),
+        productName: details.productName,
+        signedIn,
+        state: details.state
+      });
+    }
     if (details.state === "expired")
       return context.html(
         page(

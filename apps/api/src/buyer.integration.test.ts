@@ -422,3 +422,68 @@ test("a buyer with a built download gets a signed url, a buyer without a version
   });
   expect(notMine.status).toBe(404);
 }, 120_000);
+
+test("/me returns only the signed-in person's own sellers, and nothing when signed out", async () => {
+  const member = await sessionFor(buyerA);
+  const outsider = await sessionFor(buyerB);
+  await database.sql`INSERT INTO seller_members (seller_id, user_id, role) VALUES (${seller}::uuid, ${member.userId}::uuid, 'owner')`;
+
+  const api = createBuyerApi({
+    baseUrl: "https://latchkey.test",
+    exportStorage: new MemoryExportStorage(),
+    now: () => now,
+    oauth: {
+      authorizationUrl: (state) => `/oauth/${state}`,
+      exchange: () => Promise.resolve(buyerA)
+    },
+    sql: database.sql,
+    token: () => "token-value-that-is-long-enough-for-security"
+  });
+  const signedOut = await api.request("/me");
+  expect(signedOut.status).toBe(401);
+  expect(JSON.stringify(await signedOut.json())).not.toContain("seller");
+
+  const mine = await request("/me", member);
+  expect(mine.status).toBe(200);
+  expect(await mine.json()).toEqual({
+    githubUserId: "101",
+    login: "buyer-a",
+    sellers: [{ id: seller, role: "owner", slug: "seller" }]
+  });
+
+  const theirs = await request("/me", outsider);
+  expect(await theirs.json()).toMatchObject({ login: "buyer-b", sellers: [] });
+}, 120_000);
+
+test("a claim link answers in JSON with its state and whether the visitor is signed in", async () => {
+  const api = createBuyerApi({
+    baseUrl: "https://latchkey.test",
+    exportStorage: new MemoryExportStorage(),
+    now: () => now,
+    oauth: {
+      authorizationUrl: (state) => `/oauth/${state}`,
+      exchange: () => Promise.resolve(buyerA)
+    },
+    sql: database.sql,
+    token: () => "token-value-that-is-long-enough-for-security"
+  });
+  const anonymous = await api.request(`/claim/${claimToken}`, {
+    headers: { accept: "application/json" }
+  });
+  expect(await anonymous.json()).toMatchObject({
+    productName: "Starter Kit Pro",
+    signedIn: false,
+    state: "available"
+  });
+
+  const session = await sessionFor(buyerA);
+  const known = await request(`/claim/${claimToken}`, session, {
+    headers: { accept: "application/json" }
+  });
+  expect(await known.json()).toMatchObject({ signedIn: true, state: "available" });
+
+  const unknown = await api.request("/claim/this-token-does-not-exist-anywhere", {
+    headers: { accept: "application/json" }
+  });
+  expect(unknown.status).toBe(404);
+}, 120_000);

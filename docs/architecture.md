@@ -361,13 +361,14 @@ Used for: installation on seller orgs, seller login, buyer login.
 | Members (organization) | Read and write | Team membership, org invitations, removing members we added |
 | Metadata (repository) | GitHub baseline | No repository selection is requested for M3 |
 | Contents (repository) | Read-only | M8: fetch a release tag's files to build registry item JSON. Added by D-037, after M3's original scope. |
-| Administration (repository) | Read and write | M10: manage collaborators directly on a personal (non-organization) repo, which has no teams. Added by D-038. Also grants rename/delete/settings, unused, but not separable from collaborator management on GitHub's side. |
+
+Administration (repository) is deliberately **not** requested. GitHub bundles repository collaborator management (`PUT`/`DELETE /repos/{owner}/{repo}/collaborators/{username}`) under this same permission alongside deleting or transferring the repository and removing branch protection; there is no narrower permission for collaborators alone. D-038 approved adding it for personal (non-organization) repo delivery, but D-039 reversed that after the real endpoint list was checked against GitHub's own docs: every installed seller would have had to grant it, not just sellers with a personal repo. Personal-repo delivery instead guides the seller to move their repo into a free organization (`docs/product.md` section 6) and use the existing `github_team` delivery.
 
 **Webhook events subscribed:** `installation` and `installation_repositories` arrive for every GitHub App. The deployed App also subscribes to `organization`, `membership`, and `team`. `release` was added for M8 (D-037).
 
 **User authorization:** only for identity (numeric user id, login, verified primary email if granted). No repo scopes for users.
 
-M3 deliberately did not request Organization Administration or repository Contents. Plan and private-forking checks return unavailable until a later owner-approved permission change. Contents was added by D-037 for M8; Organization Administration is still not requested. Any permission change is a decision entry and requires owner approval, because it forces every seller to re-approve.
+M3 deliberately did not request Organization Administration or repository Contents. Plan and private-forking checks return unavailable until a later owner-approved permission change. Contents was added by D-037 for M8; Organization Administration and repository Administration are still not requested (D-039). Any permission change is a decision entry and requires owner approval, because it forces every seller to re-approve.
 
 ### 8.2 Endpoints we expect to use (verify before coding)
 
@@ -488,6 +489,19 @@ Repo access cannot pin a version. For github_team products with `updates_until`,
 - Immutable the same way as 11.1: `artifactVersionExists` is checked before any GitHub call or storage write, so a repeat release publish never re-fetches or overwrites an already-recorded zip.
 - Version resolution (`getLatestArtifactVersion`, `deniedLicenseStatuses`) is shared verbatim between registry items and downloads, factored out of `packages/db/src/registry.ts`: the same four statuses end access, and the same "latest version at or before `updates_until`, else latest overall" rule picks which build a buyer gets.
 - Buyer endpoint: `GET /buyer/access/:licenseId/download` (session-authenticated, JSON only). `resolveDownloadForBuyer` (`packages/db/src/downloads.ts`) is tenant-scoped through the buyer's own, unreleased seat on that license (invariant 6: a license that is not theirs, or a released seat, returns 404 via `NotFoundError`, never 403). A denied license status returns `403 auth_error`; no built version yet returns `404`. On success the response is a short-lived (300 second) signed R2 URL plus the version string, never a public object URL.
+
+---
+
+## 11a. Web app (W1)
+
+`apps/web` is the Next.js (App Router) frontend for buyers, sellers, and the marketing site. It replaces the server-rendered HTML in `apps/api` over time (D-040); the API's HTML routes still exist until the web app is deployed in their place.
+
+- **One origin.** The browser only talks to the web origin. `next.config.ts` rewrites every API path (`/auth/*`, `/logout`, `/me`, `/buyer/*`, `/sellers/*`, `/webhooks/*`, `/r/*`, `/healthz`) to `LATCHKEY_API_ORIGIN`, so session cookies stay first party and no CORS is needed. Pages (`/`, `/claim/:token`, `/access/:licenseId`, `/purchases`, `/dashboard`, `/s/:sellerId/...`) are rendered by Next.
+- **Server rendering reads the API directly.** `src/lib/api.ts` fetches `LATCHKEY_API_ORIGIN` server side, forwarding only the `lk_session` cookie, and parses every response with Zod (`src/lib/schemas.ts`). A 401 renders a sign-in prompt; a 404 renders "not found". Browser-side changes go through `src/lib/client.ts`, same origin, with the `x-csrf-token` header the API requires.
+- **Tenant isolation in the UI.** `/s/:sellerId` loads `/me` and answers 404 for any seller the viewer is not a member of, the same answer the API gives (invariant 6). Role checks stay on the server; the UI only hides controls a role cannot use.
+- **API additions for the web app.** `GET /me` (signed-in identity and seller memberships), a JSON branch on `GET /claim/:token`, and the seller license list now returns GitHub handle, seat usage, and an access state that maps every grant state (`removed_externally` and `invite_failed` read as needing the seller). Drift items tied to a grant return that license id and handle. The license timeline includes activity logged against the license's seats and grants, not only the license row.
+- **Fixture mode.** `LATCHKEY_WEB_FIXTURES=1` renders every screen from built-in sample data (`src/lib/fixtures.ts`) for design review and the Playwright suite (`e2e/web.spec.ts`). `fixturesEnabled` throws in production (D-041).
+- **Design system.** Tokens, components, and theming live in `src/app/*.css`. The direction and its rules are recorded in D-042.
 
 ---
 

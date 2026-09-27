@@ -30,6 +30,28 @@ export interface ClaimDetails {
   state: "available" | "expired" | "unavailable";
 }
 
+export interface Viewer {
+  githubUserId: string;
+  login: string | null;
+  sellers: { id: string; role: string; slug: string }[];
+}
+
+/** Only the signed-in user's own identity and the sellers they are a member of. */
+export const getViewer = async (sql: Queryable, userId: string): Promise<Viewer> => {
+  const user = (
+    await sql<{ githubUserId: string; login: string | null }[]>`
+      SELECT github_user_id::text AS "githubUserId", github_login AS login FROM users WHERE id = ${userId}::uuid
+    `
+  )[0];
+  if (user === undefined) throw new NotFoundError("This account was not found.");
+  const sellers = await sql<{ id: string; role: string; slug: string }[]>`
+    SELECT sellers.id, seller_members.role, sellers.slug FROM seller_members
+    JOIN sellers ON sellers.id = seller_members.seller_id
+    WHERE seller_members.user_id = ${userId}::uuid ORDER BY sellers.slug
+  `;
+  return { ...user, sellers };
+};
+
 export interface BuyerAccess {
   id: string;
   observed:

@@ -123,9 +123,33 @@ export const listSellerLicenses = async (
     status: string;
     purchaseEmail: string | null;
     purchasedAt: Date;
+    githubLogin: string | null;
+    seatsTotal: number;
+    seatsClaimed: number;
+    observed: string;
   }[]
 >`
- SELECT licenses.id, products.name AS "productName", licenses.status, licenses.purchase_email AS "purchaseEmail", licenses.purchased_at AS "purchasedAt" FROM licenses JOIN products ON products.id = licenses.product_id WHERE licenses.seller_id = ${sellerId}::uuid AND (${status ?? null}::text IS NULL OR licenses.status = ${status ?? null}) AND (${query ?? null}::text IS NULL OR licenses.purchase_email ILIKE ${query === undefined ? null : `%${query}%`} OR products.name ILIKE ${query === undefined ? null : `%${query}%`}) ORDER BY licenses.purchased_at DESC`;
+ SELECT licenses.id, products.name AS "productName", licenses.status,
+   licenses.purchase_email AS "purchaseEmail", licenses.purchased_at AS "purchasedAt",
+   MIN(users.github_login) FILTER (WHERE seats.released_at IS NULL) AS "githubLogin",
+   licenses.seats_total AS "seatsTotal",
+   COUNT(DISTINCT seats.id) FILTER (WHERE seats.user_id IS NOT NULL AND seats.released_at IS NULL)::integer AS "seatsClaimed",
+   CASE WHEN BOOL_OR(grants.observed IN ('needs_attention', 'removed_externally', 'invite_failed')) THEN 'needs_attention'
+     WHEN BOOL_OR(grants.observed = 'error_retrying') THEN 'error_retrying'
+     WHEN BOOL_OR(grants.observed = 'active') THEN 'active'
+     WHEN BOOL_OR(grants.observed IN ('invited', 'inviting', 'invite_expired')) THEN 'invited'
+     WHEN BOOL_OR(grants.observed = 'queued') THEN 'queued'
+     WHEN BOOL_OR(grants.observed IN ('removed', 'removing')) THEN 'removed'
+     ELSE 'none' END AS observed
+ FROM licenses JOIN products ON products.id = licenses.product_id
+ LEFT JOIN seats ON seats.license_id = licenses.id
+ LEFT JOIN users ON users.id = seats.user_id
+ LEFT JOIN grants ON grants.seat_id = seats.id
+ WHERE licenses.seller_id = ${sellerId}::uuid
+   AND (${status ?? null}::text IS NULL OR licenses.status = ${status ?? null})
+   AND (${query ?? null}::text IS NULL OR licenses.purchase_email ILIKE ${query === undefined ? null : `%${query}%`} OR products.name ILIKE ${query === undefined ? null : `%${query}%`} OR users.github_login ILIKE ${query === undefined ? null : `%${query}%`})
+ GROUP BY licenses.id, products.name
+ ORDER BY licenses.purchased_at DESC`;
 export const sellerLicenseTimeline = async (
   sql: Queryable,
   sellerId: string,
@@ -137,9 +161,17 @@ export const sellerLicenseTimeline = async (
     >`SELECT licenses.id, products.name AS "productName", licenses.status FROM licenses JOIN products ON products.id = licenses.product_id WHERE licenses.id = ${licenseId}::uuid AND licenses.seller_id = ${sellerId}::uuid`
   )[0];
   if (!license) throw new NotFoundError("License was not found.");
-  const activity = await sql<
-    { action: string; reason: string; createdAt: Date }[]
-  >`SELECT action, reason, created_at AS "createdAt" FROM activity_log WHERE seller_id = ${sellerId}::uuid AND subject_id = ${licenseId}::uuid ORDER BY created_at DESC`;
+  const activity = await sql<{ action: string; reason: string; createdAt: Date }[]>`
+    SELECT action, reason, created_at AS "createdAt" FROM activity_log
+    WHERE seller_id = ${sellerId}::uuid AND (
+      subject_id = ${licenseId}::uuid
+      OR subject_id IN (SELECT seats.id FROM seats WHERE seats.license_id = ${licenseId}::uuid)
+      OR subject_id IN (
+        SELECT grants.id FROM grants JOIN seats ON seats.id = grants.seat_id
+        WHERE seats.license_id = ${licenseId}::uuid
+      )
+    )
+    ORDER BY created_at DESC`;
   return { license, activity };
 };
 /** Manual access changes only set desired state and enqueue the reconciler. */
@@ -177,8 +209,23 @@ export const setManualAccess = async (
 };
 export const listSellerDrift = async (sql: Queryable, sellerId: string) =>
   sql<
-    { id: string; kind: string; details: Record<string, unknown>; status: string }[]
-  >`SELECT id, kind, details, status FROM drift_items WHERE seller_id = ${sellerId}::uuid ORDER BY created_at DESC`;
+    {
+      id: string;
+      kind: string;
+      details: Record<string, unknown>;
+      status: string;
+      licenseId: string | null;
+      githubLogin: string | null;
+    }[]
+  >`
+    SELECT drift_items.id, drift_items.kind, drift_items.details, drift_items.status,
+      seats.license_id AS "licenseId", users.github_login AS "githubLogin"
+    FROM drift_items
+    LEFT JOIN grants ON grants.id = drift_items.grant_id
+    LEFT JOIN seats ON seats.id = grants.seat_id
+    LEFT JOIN users ON users.id = seats.user_id
+    WHERE drift_items.seller_id = ${sellerId}::uuid
+    ORDER BY drift_items.created_at DESC`;
 export const resolveSellerDrift = async (
   sql: Sql,
   sellerId: string,
