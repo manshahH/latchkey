@@ -20,6 +20,7 @@ test("worker exposes the Graphile M2, M3, and M8 task identifiers", () => {
     "process_event",
     "process_github_webhook",
     "reconcile_grant",
-    "reconcile_sweep"
+    "reconcile_sweep",
+    "resolve_seat_username_invite"
   ]);
 });

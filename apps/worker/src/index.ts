@@ -7,8 +7,10 @@ import type { ArtifactStorage, ExportStorage } from "@latchkey/delivery";
 import type { GitHubClient } from "@latchkey/github";
 import {
   artifactVersionExists,
+  getPendingSeatUsernameInvite,
   getPendingSellerExport,
   getRegistryDeliverableConfig,
+  markSeatUsernameInviteFailed,
   markSellerExportReady,
   recordArtifactDrift,
   renderSellerExport,
@@ -16,6 +18,7 @@ import {
   processStoredGitHubWebhook,
   reserveEmail,
   reconcileStoredGrant,
+  resolveSeatUsernameInvite,
   runAllReconcileSweeps,
   runInviteWatchdog,
   runReconcileSweep,
@@ -43,6 +46,7 @@ const JobPayloadSchema = z
     grantId: z.string().uuid().optional(),
     installationId: z.string().regex(/^\d+$/).optional(),
     exportId: z.string().uuid().optional(),
+    inviteId: z.string().uuid().optional(),
     organization: z.string().min(1).optional(),
     repo: z.string().min(1).optional(),
     tag: z.string().min(1).optional()
@@ -177,6 +181,22 @@ export const createTaskList = ({
       sha256: createHash("sha256").update(body).digest("hex"),
       version: tag
     });
+  },
+  resolve_seat_username_invite: async (payload) => {
+    const inviteId = JobPayloadSchema.parse(payload).inviteId ?? "";
+    const invite = await getPendingSeatUsernameInvite(sql, inviteId);
+    // Already resolved or failed by an earlier attempt: nothing to do, a retried job is safe.
+    if (invite === null) return;
+    const githubUserId = await github.resolveUserByLogin(invite.login);
+    // A real GitHub outage (ExternalTransientError) throws here and Graphile retries with
+    // backoff, the same as every other GitHub call in this worker. A login that simply does not
+    // exist is not a system fault, so it does not throw: the manager can just retry with the
+    // correct spelling.
+    if (githubUserId === null) {
+      await markSeatUsernameInviteFailed(sql, inviteId, "github_user_not_found", now());
+      return;
+    }
+    await resolveSeatUsernameInvite(sql, inviteId, githubUserId, invite.login, now());
   },
   notify_buyer: () => Promise.resolve(undefined),
   notify_seller: () => Promise.resolve(undefined)
