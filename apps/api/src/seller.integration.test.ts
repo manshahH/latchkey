@@ -132,3 +132,46 @@ test("only an owner can change a member role", async () => {
   });
   expect(allowed.status).toBe(200);
 }, 120000);
+
+test("an admin can set a product's license type and terms; a viewer cannot", async () => {
+  const admin = await signedIn(7n, sellerA, "admin");
+  const viewer = await signedIn(8n, sellerA, "viewer");
+
+  const rejected = await request(`/sellers/${sellerA}/products/${productA}/license-terms`, viewer, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-csrf-token": viewer.csrfToken
+    },
+    body: JSON.stringify({
+      licenseType: "per-seat",
+      licenseTermsTemplate: "One seat per teammate."
+    })
+  });
+  expect(rejected.status).toBe(403);
+  expect(
+    await database.sql<
+      { licenseType: string | null }[]
+    >`SELECT license_type AS "licenseType" FROM products WHERE id = ${productA}::uuid`
+  ).toEqual([{ licenseType: null }]);
+
+  const accepted = await request(`/sellers/${sellerA}/products/${productA}/license-terms`, admin, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-csrf-token": admin.csrfToken
+    },
+    body: JSON.stringify({
+      licenseType: "per-seat",
+      licenseTermsTemplate: "One seat per teammate."
+    })
+  });
+  expect(accepted.status).toBe(200);
+  expect(
+    await database.sql<
+      { licenseType: string | null; licenseTermsTemplate: string | null }[]
+    >`SELECT license_type AS "licenseType", license_terms_template AS "licenseTermsTemplate" FROM products WHERE id = ${productA}::uuid`
+  ).toEqual([{ licenseType: "per-seat", licenseTermsTemplate: "One seat per teammate." }]);
+}, 120_000);

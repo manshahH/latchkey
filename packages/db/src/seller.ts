@@ -28,7 +28,7 @@ export const requireSellerRole = async (
   if (row === undefined) throw new NotFoundError("Seller account was not found.");
   const role = assertRole(row.role);
   if (roleRank[role] < roleRank[minimum])
-    throw new AuthError("You do not have permission to make this change.");
+    throw new AuthError("You do not have permission to make this change.", 403);
   return role;
 };
 
@@ -69,6 +69,31 @@ export const createSellerProduct = async (
   });
   return id;
 };
+/** M9 task 6: free-text license type and a template a seller can use to explain what a seat means for this product. */
+export const setProductLicenseTerms = async (
+  sql: Sql,
+  sellerId: string,
+  productId: string,
+  input: { licenseType: string | null; licenseTermsTemplate: string | null },
+  actor: string,
+  now: Date
+): Promise<void> => {
+  if (input.licenseType !== null && input.licenseType.length > 100)
+    throw new ValidationError("License type must be 100 characters or fewer.");
+  if (input.licenseTermsTemplate !== null && input.licenseTermsTemplate.length > 2_000)
+    throw new ValidationError("License terms must be 2000 characters or fewer.");
+  await sql.begin(async (tx) => {
+    const row = (
+      await tx<{ id: string }[]>`
+        UPDATE products SET license_type = ${input.licenseType}, license_terms_template = ${input.licenseTermsTemplate}
+        WHERE id = ${productId}::uuid AND seller_id = ${sellerId}::uuid RETURNING id
+      `
+    )[0];
+    if (row === undefined) throw new NotFoundError("Product was not found.");
+    await tx`INSERT INTO activity_log (id, seller_id, subject_type, subject_id, action, reason, actor, created_at) VALUES (${randomUUID()}::uuid, ${sellerId}::uuid, 'product', ${productId}::uuid, 'license_terms_updated', 'Seller updated license type and terms', ${actor}, ${now.toISOString()})`;
+  });
+};
+
 export const archiveSellerProduct = async (
   sql: Sql,
   sellerId: string,
