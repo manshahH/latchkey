@@ -7,7 +7,7 @@ import {
   enqueueJob,
   storeVerifiedGitHubWebhook
 } from "@latchkey/db";
-import { MemoryExportStorage } from "@latchkey/delivery";
+import { MemoryArtifactStorage, MemoryExportStorage } from "@latchkey/delivery";
 import { FakeGitHub } from "@latchkey/github";
 import { FakeClock, startPostgres, type TestPostgres } from "@latchkey/testing";
 import { createTaskList } from "./index.js";
@@ -27,7 +27,8 @@ const runOne = async (github: FakeGitHub, clock: FakeClock): Promise<void> => {
       github,
       now: () => clock.now(),
       sql: database.sql,
-      exportStorage: new MemoryExportStorage()
+      exportStorage: new MemoryExportStorage(),
+      artifactStorage: new MemoryArtifactStorage()
     })
   );
 };

@@ -91,3 +91,32 @@ test("real client maps retryable and permanent GitHub responses without exposing
     message: "GitHub could not complete this access change."
   });
 });
+
+test("real client decodes a repository file's base64 content and returns null when it is missing", async () => {
+  const repoTarget = { installationId: 99n, organization: "seller-org", repo: "widget-kit" };
+  const encoded = Buffer.from('{"name":"widget"}', "utf8").toString("base64");
+  const client = new GitHubAppClient({
+    appId: 123,
+    privateKey,
+    now: () => new Date("2026-01-01T00:00:00Z"),
+    fetch: (input: string | URL | Request): Promise<Response> => {
+      const url = urlFor(input);
+      if (url.endsWith("/access_tokens"))
+        return Promise.resolve(
+          Response.json({ token: "installation-token", expires_at: "2026-01-01T01:00:00Z" })
+        );
+      if (url.includes("/contents/registry.json"))
+        return Promise.resolve(
+          Response.json({ type: "file", encoding: "base64", content: encoded })
+        );
+      if (url.includes("/contents/missing.json"))
+        return Promise.resolve(new Response("", { status: 404 }));
+      return Promise.reject(new Error("Unexpected test request."));
+    }
+  });
+
+  expect(await client.getRepositoryFile(repoTarget, "registry.json", "v1.0.0")).toBe(
+    '{"name":"widget"}'
+  );
+  expect(await client.getRepositoryFile(repoTarget, "missing.json", "v1.0.0")).toBeNull();
+});

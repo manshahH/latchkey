@@ -36,3 +36,19 @@ test("fake github expires invitations, injects errors, and keeps renamed numeric
     github.inviteToTeam(target, 9n);
   }).toThrow("not found");
 });
+
+test("fake github serves a set repository file and returns null when unset, and injects one-shot failures", () => {
+  const github = new FakeGitHub();
+  const repoTarget = { organization: "seller-org", repo: "widget-kit" };
+  github.setRepositoryFile(repoTarget, "v1.0.0", "registry.json", '{"items":[]}');
+
+  expect(github.getRepositoryFile(repoTarget, "registry.json", "v1.0.0")).toBe('{"items":[]}');
+  expect(github.getRepositoryFile(repoTarget, "missing.json", "v1.0.0")).toBeNull();
+  expect(github.getRepositoryFile(repoTarget, "registry.json", "v2.0.0")).toBeNull();
+
+  github.failNextRepositoryFile("rate_limited");
+  expect(() => github.getRepositoryFile(repoTarget, "registry.json", "v1.0.0")).toThrow(
+    "rate limit"
+  );
+  expect(github.getRepositoryFile(repoTarget, "registry.json", "v1.0.0")).toBe('{"items":[]}');
+});

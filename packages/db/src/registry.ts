@@ -134,3 +134,74 @@ export const resolveApiToken = async (
   const row = rows[0];
   return row === undefined ? null : { ...row, updatesUntil: toDate(row.updatesUntil) };
 };
+
+export interface RegistryDeliverableConfig {
+  itemName: string;
+  organization: string;
+  repo: string;
+  sellerId: string;
+}
+
+/** A deliverable's `config` for type 'registry' names one item in the seller's registry.json. */
+export const getRegistryDeliverableConfig = async (
+  sql: Queryable,
+  deliverableId: string
+): Promise<RegistryDeliverableConfig | null> => {
+  const rows = await sql<
+    { config: Omit<RegistryDeliverableConfig, "sellerId">; sellerId: string; type: string }[]
+  >`
+    SELECT deliverables.config, deliverables.type, products.seller_id AS "sellerId"
+    FROM deliverables JOIN products ON products.id = deliverables.product_id
+    WHERE deliverables.id = ${deliverableId}::uuid
+  `;
+  const row = rows[0];
+  if (row === undefined || row.type !== "registry") return null;
+  return { ...row.config, sellerId: row.sellerId };
+};
+
+/** Visible to the seller in the same shape as other build/mapping problems (kind + details). */
+export const recordArtifactDrift = async (
+  sql: Sql,
+  sellerId: string,
+  kind: string,
+  details: Record<string, unknown>
+): Promise<void> => {
+  await sql`
+    INSERT INTO drift_items (id, seller_id, kind, details)
+    VALUES (${randomUUID()}::uuid, ${sellerId}::uuid, ${kind}, ${JSON.stringify(details)})
+  `;
+};
+
+/**
+ * Checked before doing any GitHub fetching or storage write, so a re-published tag never even
+ * reaches `artifactStorage.put` a second time: overwriting the object at an already-recorded key
+ * would silently invalidate its recorded sha256, even though the database row itself never moves.
+ */
+export const artifactVersionExists = async (
+  sql: Queryable,
+  deliverableId: string,
+  version: string
+): Promise<boolean> => {
+  const rows = await sql<{ id: string }[]>`
+    SELECT id FROM artifact_versions WHERE deliverable_id = ${deliverableId}::uuid AND version = ${version}
+  `;
+  return rows[0] !== undefined;
+};
+
+/**
+ * Immutable: a version already recorded for this deliverable is never overwritten (architecture
+ * 11.1, "stores them ... immutable"). Returns false when the version already existed, matching
+ * the "processed effectively once" pattern used by `enqueueWebhookEvent` elsewhere in this repo.
+ */
+export const storeArtifactVersion = async (
+  sql: Sql,
+  input: { deliverableId: string; version: string; s3Key: string; sha256: string; releasedAt: Date }
+): Promise<boolean> => {
+  const rows = await sql<{ id: string }[]>`
+    INSERT INTO artifact_versions (id, deliverable_id, version, released_at, s3_key, sha256)
+    VALUES (${randomUUID()}::uuid, ${input.deliverableId}::uuid, ${input.version}, ${input.releasedAt.toISOString()}, ${input.s3Key}, ${input.sha256})
+    ON CONFLICT (deliverable_id, version) DO NOTHING
+    RETURNING id
+  `;
+  return rows[0] !== undefined;
+};

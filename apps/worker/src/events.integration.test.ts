@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { runMigrations, runOnce } from "graphile-worker";
 import { randomUUID } from "node:crypto";
 import { ExternalTransientError } from "@latchkey/core";
-import { MemoryExportStorage } from "@latchkey/delivery";
+import { MemoryArtifactStorage, MemoryExportStorage } from "@latchkey/delivery";
 import { MemoryEmailSender } from "@latchkey/email";
 import {
   enqueueJob,
@@ -48,13 +48,15 @@ const runAvailableJobs = async (
   github: FakeGitHub,
   afterGitHubCall?: () => void,
   email?: MemoryEmailSender,
-  exportStorage = new MemoryExportStorage()
+  exportStorage = new MemoryExportStorage(),
+  artifactStorage = new MemoryArtifactStorage()
 ): Promise<void> => {
   const tasks = createTaskList({
     sql: database.sql,
     github,
     now: () => now,
     afterGitHubCall,
+    artifactStorage,
     email,
     exportStorage,
     ...(email === undefined ? {} : { claimBaseUrl: "https://latchkey.test" })

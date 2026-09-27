@@ -52,5 +52,14 @@ export {
 } from "./buyer.js";
 export type { BuyerAccess, BuyerIdentity, BuyerSession, ClaimDetails } from "./buyer.js";
 export * from "./seller.js";
-export { createApiToken, listApiTokens, resolveApiToken, revokeApiToken } from "./registry.js";
-export type { ApiTokenResolution, ApiTokenSummary } from "./registry.js";
+export {
+  artifactVersionExists,
+  createApiToken,
+  getRegistryDeliverableConfig,
+  listApiTokens,
+  recordArtifactDrift,
+  resolveApiToken,
+  revokeApiToken,
+  storeArtifactVersion
+} from "./registry.js";
+export type { ApiTokenResolution, ApiTokenSummary, RegistryDeliverableConfig } from "./registry.js";

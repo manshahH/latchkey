@@ -6,7 +6,7 @@ import {
   loadR2Config
 } from "@latchkey/config";
 import { createDatabase } from "@latchkey/db";
-import { createR2ExportStorage } from "@latchkey/delivery";
+import { createR2ArtifactStorage, createR2ExportStorage } from "@latchkey/delivery";
 import { createResendEmailSender } from "@latchkey/email";
 import { GitHubAppClient } from "@latchkey/github";
 
@@ -18,6 +18,12 @@ const run = async (): Promise<void> => {
   const r2 = loadR2Config(process.env);
   const database = createDatabase(config.LATCHKEY_DATABASE_URL);
   const worker = await startWorker(config.LATCHKEY_DATABASE_URL, {
+    artifactStorage: createR2ArtifactStorage({
+      accessKeyId: r2.LATCHKEY_R2_ACCESS_KEY_ID,
+      accountId: r2.LATCHKEY_R2_ACCOUNT_ID,
+      bucket: r2.LATCHKEY_R2_BUCKET,
+      secretAccessKey: r2.LATCHKEY_R2_SECRET_ACCESS_KEY
+    }),
     claimBaseUrl: hosted.LATCHKEY_PUBLIC_BASE_URL,
     email: createResendEmailSender({
       apiKey: hosted.LATCHKEY_RESEND_API_KEY,

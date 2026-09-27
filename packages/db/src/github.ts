@@ -21,6 +21,11 @@ const TeamPayloadSchema = z.object({
   organization: z.object({ login: z.string().min(1) }),
   team: z.object({ slug: z.string().min(1) })
 });
+const ReleasePayloadSchema = z.object({
+  installation: InstallationSchema,
+  release: z.object({ tag_name: z.string().min(1) }),
+  repository: z.object({ name: z.string().min(1), owner: z.object({ login: z.string().min(1) }) })
+});
 const OrganizationPayloadSchema = z.object({
   installation: InstallationSchema,
   membership: z
@@ -123,6 +128,44 @@ const processInstallation = async (
       runAt: now
     });
   }
+};
+
+/**
+ * A published release can back more than one registry deliverable in the same repo (a seller
+ * selling several items out of one monorepo). One build_registry_artifacts job is enqueued per
+ * matching deliverable; each fetches the release's registry.json independently, mirroring the
+ * one-job-per-entity pattern used everywhere else in this file (reconcile_sweep per installation,
+ * for example). No GitHub API call happens in this database-only handler.
+ */
+const processRelease = async (
+  sql: Queryable,
+  action: string | null,
+  payload: Record<string, unknown>,
+  now: Date
+): Promise<void> => {
+  if (action !== "published") return;
+  const parsed = ReleasePayloadSchema.parse(payload);
+  const deliverables = await sql<{ id: string }[]>`
+    SELECT deliverables.id FROM deliverables
+    JOIN products ON products.id = deliverables.product_id
+    JOIN github_installations ON github_installations.seller_id = products.seller_id
+    WHERE deliverables.type = 'registry'
+      AND deliverables.config ->> 'organization' = ${parsed.repository.owner.login}
+      AND deliverables.config ->> 'repo' = ${parsed.repository.name}
+  `;
+  for (const deliverable of deliverables)
+    await enqueueJob(sql, {
+      taskIdentifier: "build_registry_artifacts",
+      payload: {
+        deliverableId: deliverable.id,
+        installationId: String(parsed.installation.id),
+        organization: parsed.repository.owner.login,
+        repo: parsed.repository.name,
+        tag: parsed.release.tag_name
+      },
+      jobKey: `registry-artifacts:${deliverable.id}:${parsed.release.tag_name}`,
+      runAt: now
+    });
 };
 
 /** An organization-level removal also removes every managed team membership for that user. */
@@ -270,6 +313,8 @@ export const processStoredGitHubWebhook = async (
       await processTeam(transaction, delivery.action, delivery.payload, now);
     if (delivery.event === "organization")
       await processOrganization(transaction, delivery.action, delivery.payload, now);
+    if (delivery.event === "release")
+      await processRelease(transaction, delivery.action, delivery.payload, now);
     await transaction`UPDATE github_webhook_deliveries SET processed_at = ${now.toISOString()}, process_error = NULL WHERE id = ${delivery.id}::uuid`;
   });
 };
