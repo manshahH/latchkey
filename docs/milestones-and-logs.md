@@ -18,7 +18,7 @@
 | M5 Claim and buyer experience | DONE | 2026-09-21 | 2026-09-21 | Claim, buyer access, delivery email, and local acceptance suite complete. |
 | M6 Seller dashboard | DONE | 2026-09-21 | 2026-09-22 | Sandbox purchase/refund webhooks, GitHub access and safe team/org revocation verified; temporary provider resources removed; `pnpm check` passed. |
 | M7 Beta readiness | IN PROGRESS, deployment paused | 2026-09-22 | | Everything buildable locally is done (see the M7 remaining-work list below). Cloudflare deployment deliberately paused until the owner is ready (D-034); resume there, do not start M8's registry deploy pipeline as a substitute. |
-| M8 Registry delivery | IN PROGRESS | 2026-09-27 | | Owner enabled Contents: read and the release webhook (D-037). Buyer token management, and release-triggered artifact building done. Next: the registry serving endpoint. |
+| M8 Registry delivery | DONE | 2026-09-27 | 2026-09-27 | Buyer token management, release-triggered artifact building, and the registry serving endpoint all done and proven. Remaining small tasks (fingerprinting, update-window UI/email) deferred to real beta feedback, matching the plan's own note. |
 | M9 Team licenses | NOT STARTED | | | |
 | M10 Later phase | NOT PLANNED | | | Plan after beta feedback |
 
@@ -31,7 +31,7 @@ Statuses: NOT STARTED, IN PROGRESS, BLOCKED (say on what), IN REVIEW, DONE.
 **Last updated:** 2026-09-27
 **Branch in progress:** `main` (this session's work was small and self-contained; done directly rather than on a new feature branch).
 **What exists:** M0 through M6 are complete. M7 has a Supabase and Cloudflare Containers deployment manifest, credential templates, hosted API and worker entry points, private R2 export wiring, platform billing persistence (off by default, D-033), plan-usage evaluation, required operator runbooks, a verified invariant-to-test table, and a passed dependency/secrets security pass. The active `latchkey-staging` Supabase project is linked locally in Mumbai, migrations `0000` through `0006` are applied, and ignored staging secrets contain every value the local stack needs. A full sandbox purchase, an unmapped-product reprocess, a claim, and a real Resend email delivery have all been proven against the live local API and worker running on the owner's machine.
-**Next action:** M8's registry serving endpoint (`GET /r/:sellerSlug/:item.json`), the last piece task 3 needs. M7 has nothing further buildable locally: what remains needs either the owner's Cloudflare Workers Paid plan (D-034, deliberately deferred by the owner) or legal text before the real public launch (D-035, also deferred).
+**Next action:** M8 is done. Nothing is buildable locally for M7 either: what remains needs either the owner's Cloudflare Workers Paid plan (D-034, deliberately deferred by the owner) or legal text before the real public launch (D-035, also deferred). Waiting on the owner to choose what's next: M9 (team licenses), resuming M7's deployment once Cloudflare is funded, or a pause.
 **Open blockers:** Cloudflare Workers Paid plan for webhooks, deploy, restore drill, alarm test, and 72-hour soak; auth/claim/resend rate limiting, which is Cloudflare Rate Limiting rules configured at deploy time (D-036); a sending domain for Resend before real buyers (not just the owner) get email; legal text before the real public launch (not the private beta, D-035); final owner beta approval.
 **M7 remaining work (all paused, owner said leave deployment for now):**
 1. Fund and configure the Cloudflare Workers Paid plan, then follow `docs/m7-supabase-cloudflare-setup.md` to upload secrets, dry-run validate, and deploy staging from `main`.
@@ -364,6 +364,25 @@ Format (newest first):
 - Not done / deferred: the owner still needs to click through the real GitHub OAuth consent screen in a browser; I could not do that from here since it needs the owner's GitHub login. Everything else from the previous entry (Cloudflare hosting, webhooks, soak) is still waiting on D-034.
 - Docs updated: architecture section 13, `m7-supabase-cloudflare-setup.md`, this work log.
 - Next step: owner retries GitHub sign-in at `http://localhost:8080/auth/github?returnTo=/purchases` with the restarted server.
+
+### 2026-09-27: M8 registry serving endpoint, M8 done
+- Branch / commits: `m8/registry-serving`, off `main` (after PR #2, #3, and #4 all merged).
+- Goal: the last M8 piece, `GET /r/:sellerSlug/:item.json`: resolve a bearer token to a license, pick the right version, verify it before serving it, and never leak which part of a bad request was wrong.
+- Done:
+  - `packages/core/src/errors.ts`: `AuthError` now takes an optional statusCode (`401 | 403`, defaults to `401`). Architecture section 12 already documented AuthError as covering both; the class just did not support it yet. Fixed the code to match the already-documented intent rather than inventing a new error class or silently leaving the gap.
+  - `packages/db/src/registry.ts`: `resolveApiToken` now also returns the seller's `slug` (one more field on an existing query, no new round trip) so the endpoint can check a token is being used against its own seller's slug. `resolveRegistryArtifact`: denies access only for the four statuses architecture 11.1 names as ending it (`revoked`, `refunded`, `charged_back`, `ended`); every other status, including `updates_ended` and `disputed`, still resolves a version, because `updates_until` is what actually limits which version they can install, not the license status itself. Version resolution: latest `artifact_versions` row at or before `updates_until`, or latest overall with no window.
+  - `apps/api/src/registry.ts`: the endpoint. No token, a token that does not resolve, and a resolvable token used against the wrong `sellerSlug` all return the identical 401 shape, so trying seller slugs teaches an attacker nothing. The sha256 recorded at build time is recomputed and checked on every serve; a mismatch is a 500 `InvariantViolation`, never served.
+- Proof: `pnpm check` exit 0: 89 unit, 43 core (97% coverage), 56 integration (9 new in `apps/api/src/registry.integration.test.ts`).
+- Gates and negative tests, each proven non-vacuous by breaking the code and watching the exact named test fail, then restoring:
+  - No token, unknown token, and wrong-seller-slug token all return the same 401 (removed the initial token check, and separately the sellerSlug comparison; each broke the same shared test, since all three cases live in it on purpose, to prove they are indistinguishable).
+  - A tampered stored artifact never serves (removed the sha256 recheck).
+  - The four denied license statuses actually deny (emptied the denied-status set, all four `test.each` cases failed).
+  - `updates_until` actually limits the served version (removed the date filter from the version query).
+- Edge cases considered: a license with `updates_until` in the past still gets its entitled older version, not a 403 (a status like `updates_ended` is not itself a denial, tested); an unknown item name and a known item with no version yet both 404 the same way; a license that gives access under a status the deny list does not name (only the four literal statuses deny, nothing else).
+- Decisions made: none new. The `AuthError` statusCode fix applies architecture section 12 as already written; it does not change it.
+- Not done / deferred: registry rate limiting (Cloudflare Rate Limiting at deploy time, D-036), optional fingerprinting (a comment line with a license hash in served files, off by default per product, M8 task 6), a real `npx shadcn add` run against a deployed staging environment (needs the Cloudflare deploy, D-034).
+- Docs updated: architecture 11.1 (endpoint, resolution, integrity check) and 12 is unchanged (already correct).
+- Next step: M8's remaining tasks (fingerprinting, update-window UI/email support) are small and can wait for real seller feedback, matching the plan's own note that "M8 onward is shaped by beta feedback." Nothing else in M8 is blocking. Owner decides what to build next: M9 (team licenses), the M7 deployment items once Cloudflare is funded, or pause here.
 
 ### 2026-09-27: M8 release-triggered registry artifact building
 - Branch / commits: `m8/release-artifacts`, off the current `main` (after PR #2 and PR #3 both merged).
