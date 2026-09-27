@@ -52,3 +52,12 @@ test("fake github serves a set repository file and returns null when unset, and 
   );
   expect(github.getRepositoryFile(repoTarget, "registry.json", "v1.0.0")).toBe('{"items":[]}');
 });
+
+test("fake github resolves a set login to its numeric id, and null for an unknown or deleted one", () => {
+  const github = new FakeGitHub();
+  github.setUser(7n, "octocat");
+  expect(github.resolveUserByLogin("octocat")).toBe(7n);
+  expect(github.resolveUserByLogin("nobody-by-this-name")).toBeNull();
+  github.deleteUser(7n);
+  expect(github.resolveUserByLogin("octocat")).toBeNull();
+});

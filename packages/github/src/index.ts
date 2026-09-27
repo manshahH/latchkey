@@ -49,6 +49,8 @@ export interface GitHubClient {
   inviteToTeam(target: TeamTarget, userId: bigint): Awaitable<void>;
   listTeamMembers(target: TeamTarget): Awaitable<bigint[]>;
   listUserTeams(organization: string, userId: bigint, installationId?: bigint): Awaitable<string[]>;
+  /** Null means no GitHub account has that login (invariant 7: identity stays the numeric id from here on). */
+  resolveUserByLogin(login: string): Awaitable<bigint | null>;
   removeOrganizationMember(
     organization: string,
     userId: bigint,
@@ -299,11 +301,19 @@ export class GitHubAppClient implements GitHubClient {
     });
   }
 
-  private async appRequest<T>(path: string): Promise<T> {
+  public async resolveUserByLogin(login: string): Promise<bigint | null> {
+    const user = await this.appRequest<{ id: number } | null>(
+      `/users/${encodeURIComponent(login)}`,
+      true
+    );
+    return user === null ? null : BigInt(user.id);
+  }
+
+  private async appRequest<T>(path: string, allowNotFound = false): Promise<T> {
     const response = await this.fetcher(`${this.apiBaseUrl}${path}`, {
       headers: this.headers(this.createAppJwt())
     });
-    return this.parseResponse<T>(response, false);
+    return this.parseResponse<T>(response, allowNotFound);
   }
 
   private createAppJwt(): string {
@@ -598,6 +608,12 @@ export class FakeGitHub implements GitHubClient {
     this.record("list_user_teams", { organization }, userId);
     const state = this.organization(organization);
     return [...state.teams].flatMap(([slug, members]) => (members.has(userId) ? [slug] : []));
+  }
+
+  public resolveUserByLogin(login: string): bigint | null {
+    for (const [userId, candidateLogin] of this.logins)
+      if (candidateLogin === login && !this.deletedUsers.has(userId)) return userId;
+    return null;
   }
 
   /** Test setup: makes a file readable at (organization, repo, ref, path). Absent means 404. */
