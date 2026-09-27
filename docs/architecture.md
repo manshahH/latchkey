@@ -141,7 +141,7 @@ All seller-owned tables carry `seller_id`. IDs are UUIDv7. Timestamps are `times
 | `github_installations` | GitHub App installed on an org | `installation_id` unique, `seller_id`, numeric account id, account login and type, granted permissions, installed and updated timestamps, suspended and uninstalled timestamps |
 | `provider_connections` | A connected payment provider | `seller_id`, `provider`, `webhook_secret_enc`, `api_key_enc`, `key_version`, `status`, `mode` (test, live) |
 | `products` | What is sold | `seller_id`, `name`, `status` (draft, active, archived), `update_window_days` nullable, `revoke_policy` jsonb |
-| `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: organization and team slug) |
+| `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: organization and team slug; for registry: organization, repo, and itemName, section 11.1) |
 | `provider_products` | Maps provider product/price IDs to our product | `provider_connection_id`, `external_product_id`, `external_price_id`, `product_id`, `seats` default 1, unique on (connection, external ids) |
 | `licenses` | One purchase or subscription | `seller_id`, `product_id`, `status`, `kind` (one_time, subscription), `seats_total`, `purchased_at`, `updates_until` nullable, `purchase_email`, `manager_user_id` nullable, `status_reason` |
 | `license_external_refs` | Links a license to provider objects (many providers over time) | `license_id`, `provider`, `external_order_id`, `external_subscription_id`, `external_customer_id`, unique on (provider, external_order_id) |
@@ -454,11 +454,15 @@ Where a provider lacks an explicit event, `backfill` must detect the change by p
 
 ### 11.1 Private registry (shadcn compatible)
 
-- Seller's repo contains a registry definition. On `release` published, worker fetches the tag, builds registry item JSON files, stores them under `s3://artifacts/<seller>/<deliverable>/<version>/` immutable, records `artifact_versions` with sha256.
-- Endpoint: `GET /r/:sellerSlug/:item.json` with `Authorization: Bearer <token>`.
-- Resolution: token -> seat -> license. If license gives access: serve the latest version released at or before `updates_until` (or latest if no window). If revoked, refunded, charged back, or ended: `403` with a JSON error message the CLI can show (shadcn CLI surfaces registry error messages).
+- A `registry` deliverable's `config` names one item in the seller's own `registry.json`: `{ organization, repo, itemName }`. One deliverable is one registry item, not a whole registry: a seller selling several items from one repo creates one deliverable per item. The seller's repo carries its own `registry.json` (items array) at its root, the shadcn authoring convention (https://ui.shadcn.com/docs/registry/registry-json), each item shaped like `registry-item.json` (https://ui.shadcn.com/docs/registry/registry-item-json) with `files[].path` pointing at real files in the repo.
+- On a `release` webhook with `action: "published"` (requires the App's `Contents: read` permission, D-037), `processStoredGitHubWebhook` (database only, no GitHub call) looks up every `registry` deliverable whose config matches the release's organization and repo, and enqueues one `build_registry_artifacts` job per matching deliverable.
+- The job (`packages/core`'s `parseRegistryManifest` and `buildRegistryItem` do the pure JSON shaping; the job itself does the GitHub fetching and storage, keeping I/O out of `packages/core`): fetches `registry.json` at the release tag, finds the one item named by the deliverable's `itemName`, fetches each of that item's files, embeds their content, stores the result under `artifacts/<deliverableId>/<tag>.json` in R2, and records one `artifact_versions` row with its sha256.
+- Immutable: a version already recorded for a deliverable is never rebuilt, even if the seller edits the tag's contents afterward and republishes. Checked before any GitHub call or storage write, so a repeat publish costs nothing and can never silently invalidate an already-recorded sha256.
+- A registry.json that cannot be fetched or parsed, a named item missing from it, or one of its files failing to fetch: no artifact is built, and a `drift_items` row records why (`registry_manifest_missing`, `registry_manifest_invalid`, `registry_item_missing`, `registry_file_missing` with the file path), the same visible-to-the-seller pattern `unmapped_product` already uses.
+- Endpoint: `GET /r/:sellerSlug/:item.json` with `Authorization: Bearer <token>` (next: M8 task 3).
+- Resolution: token -> seat -> license, via `resolveApiToken` (already built). If license gives access: serve the latest version released at or before `updates_until` (or latest if no window). If revoked, refunded, charged back, or ended: `403` with a JSON error message the CLI can show (shadcn CLI surfaces registry error messages).
 - Optional fingerprint: a comment line with a license hash inserted into served source files. Never alters code semantics. Off by default per product.
-- Rate limit per token. Log usage to `api_tokens.last_used_at`.
+- Rate limit per token: a Cloudflare Rate Limiting rule at the deploy step (D-036), not in-app code. Log usage to `api_tokens.last_used_at`.
 
 ### 11.2 Update windows for github_team deliverables
 
