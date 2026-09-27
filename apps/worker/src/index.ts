@@ -1,10 +1,16 @@
+import { createHash } from "node:crypto";
+
 import { run, type Runner, type TaskList } from "graphile-worker";
+import { buildRegistryItem, parseRegistryManifest } from "@latchkey/core";
 import { claimLinkEmail, type EmailSender } from "@latchkey/email";
-import type { ExportStorage } from "@latchkey/delivery";
+import type { ArtifactStorage, ExportStorage } from "@latchkey/delivery";
 import type { GitHubClient } from "@latchkey/github";
 import {
+  artifactVersionExists,
   getPendingSellerExport,
+  getRegistryDeliverableConfig,
   markSellerExportReady,
+  recordArtifactDrift,
   renderSellerExport,
   processStoredEvent,
   processStoredGitHubWebhook,
@@ -12,7 +18,8 @@ import {
   reconcileStoredGrant,
   runAllReconcileSweeps,
   runInviteWatchdog,
-  runReconcileSweep
+  runReconcileSweep,
+  storeArtifactVersion
 } from "@latchkey/db";
 import type { Sql } from "postgres";
 import { z } from "zod";
@@ -20,6 +27,7 @@ import { z } from "zod";
 export interface WorkerDependencies {
   sql: Sql;
   github: GitHubClient;
+  artifactStorage: ArtifactStorage;
   claimBaseUrl?: string;
   email?: EmailSender;
   exportStorage: ExportStorage;
@@ -29,16 +37,21 @@ export interface WorkerDependencies {
 
 const JobPayloadSchema = z
   .object({
+    deliverableId: z.string().uuid().optional(),
     deliveryId: z.string().uuid().optional(),
     externalEventId: z.string().uuid().optional(),
     grantId: z.string().uuid().optional(),
     installationId: z.string().regex(/^\d+$/).optional(),
-    exportId: z.string().uuid().optional()
+    exportId: z.string().uuid().optional(),
+    organization: z.string().min(1).optional(),
+    repo: z.string().min(1).optional(),
+    tag: z.string().min(1).optional()
   })
   .strict();
 
 export const createTaskList = ({
   sql,
+  artifactStorage,
   claimBaseUrl,
   email,
   exportStorage,
@@ -107,6 +120,63 @@ export const createTaskList = ({
       key,
       new Date(now().getTime() + 7 * 24 * 60 * 60 * 1000)
     );
+  },
+  build_registry_artifacts: async (payload) => {
+    const job = JobPayloadSchema.parse(payload);
+    const deliverableId = job.deliverableId ?? "";
+    const organization = job.organization ?? "";
+    const repo = job.repo ?? "";
+    const tag = job.tag ?? "";
+    const config = await getRegistryDeliverableConfig(sql, deliverableId);
+    // The deliverable was deleted or changed type since this job was enqueued. Nothing to build.
+    if (config === null) return;
+    // Immutable: never re-fetch or re-write an already-recorded version, even with edited content.
+    if (await artifactVersionExists(sql, deliverableId, tag)) return;
+    const drift = (kind: string, details: Record<string, unknown>) =>
+      recordArtifactDrift(sql, config.sellerId, kind, { deliverableId, tag, ...details });
+    const manifestRaw = await github.getRepositoryFile(
+      { organization, repo },
+      "registry.json",
+      tag
+    );
+    if (manifestRaw === null) {
+      await drift("registry_manifest_missing", {});
+      return;
+    }
+    const manifest = parseRegistryManifest(manifestRaw);
+    if (manifest === null) {
+      await drift("registry_manifest_invalid", {});
+      return;
+    }
+    const source = manifest.items.find((item) => item.name === config.itemName);
+    if (source === undefined) {
+      await drift("registry_item_missing", { itemName: config.itemName });
+      return;
+    }
+    const fileContents = new Map<string, string>();
+    for (const file of source.files) {
+      const content = await github.getRepositoryFile({ organization, repo }, file.path, tag);
+      if (content === null) {
+        await drift("registry_file_missing", { path: file.path });
+        return;
+      }
+      fileContents.set(file.path, content);
+    }
+    const built = buildRegistryItem(source, fileContents);
+    if ("error" in built) {
+      await drift("registry_file_missing", { path: built.error.path });
+      return;
+    }
+    const body = JSON.stringify(built.item);
+    const key = `artifacts/${deliverableId}/${tag}.json`;
+    await artifactStorage.put({ body, contentType: "application/json", key });
+    await storeArtifactVersion(sql, {
+      deliverableId,
+      releasedAt: now(),
+      s3Key: key,
+      sha256: createHash("sha256").update(body).digest("hex"),
+      version: tag
+    });
   },
   notify_buyer: () => Promise.resolve(undefined),
   notify_seller: () => Promise.resolve(undefined)
