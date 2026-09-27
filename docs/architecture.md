@@ -141,7 +141,7 @@ All seller-owned tables carry `seller_id`. IDs are UUIDv7. Timestamps are `times
 | `github_installations` | GitHub App installed on an org | `installation_id` unique, `seller_id`, numeric account id, account login and type, granted permissions, installed and updated timestamps, suspended and uninstalled timestamps |
 | `provider_connections` | A connected payment provider | `seller_id`, `provider`, `webhook_secret_enc`, `api_key_enc`, `key_version`, `status`, `mode` (test, live) |
 | `products` | What is sold | `seller_id`, `name`, `status` (draft, active, archived), `update_window_days` nullable, `revoke_policy` jsonb, `license_type` nullable (M9, free text), `license_terms_template` nullable (M9, free text) |
-| `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: organization and team slug; for registry: organization, repo, and itemName, section 11.1) |
+| `deliverables` | How a product is delivered | `product_id`, `type` (github_team, registry, download), `config` jsonb (for github_team: organization and team slug; for registry: organization, repo, and itemName, section 11.1; for download: organization and repo, section 11.3) |
 | `provider_products` | Maps provider product/price IDs to our product | `provider_connection_id`, `external_product_id`, `external_price_id`, `product_id`, `seats` default 1, unique on (connection, external ids) |
 | `licenses` | One purchase or subscription | `seller_id`, `product_id`, `status`, `kind` (one_time, subscription), `seats_total`, `purchased_at`, `updates_until` nullable, `purchase_email`, `manager_user_id` nullable, `status_reason` |
 | `license_external_refs` | Links a license to provider objects (many providers over time) | `license_id`, `provider`, `external_order_id`, `external_subscription_id`, `external_customer_id`, unique on (provider, external_order_id) |
@@ -461,7 +461,7 @@ Where a provider lacks an explicit event, `backfill` must detect the change by p
 
 ---
 
-## 11. Delivery: registry and downloads (Next phase)
+## 11. Delivery: registry and downloads
 
 ### 11.1 Private registry (shadcn compatible)
 
@@ -478,7 +478,16 @@ Where a provider lacks an explicit event, `backfill` must detect the change by p
 
 ### 11.2 Update windows for github_team deliverables
 
-Repo access cannot pin a version. For github_team products with `updates_until`, access is removed when the window ends, and the buyer gets a download of the last tag before expiry (Later phase). Until downloads exist, sellers are told this clearly in the product form.
+Repo access cannot pin a version. For github_team products with `updates_until`, access is removed when the window ends, and the buyer gets a download of the last tag before expiry (Later phase: wiring a github_team product's expiry to automatically hand out a zip is not built yet, even though the `download` deliverable type in 11.3 could serve it). Until that wiring exists, sellers are told this clearly in the product form.
+
+### 11.3 Plain zip downloads (M10)
+
+- A `download` deliverable is a standalone delivery type, independent of `github_team` and `registry`: it never touches GitHub org membership, only a repo's release contents. Its `config` is `{ organization, repo }` (`packages/db/src/downloads.ts`, `getDownloadDeliverableConfig`).
+- On the same `release` webhook (`action: "published"`) that drives registry builds, `processRelease` (`packages/db/src/github.ts`) now matches both `registry` and `download` deliverables for the repo in one query and enqueues the matching job (`build_registry_artifacts` or `build_download_artifact`), keyed `${type}-artifact:${deliverableId}:${tag}` so each is independently idempotent.
+- `build_download_artifact` (`apps/worker/src/index.ts`) fetches the release tag's zipball with `GitHubClient.getRepositoryZip` (the real client streams the GitHub zipball redirect through a plain `fetch`, bypassing the JSON `request()` helper since the body is binary), stores it at `downloads/<deliverableId>/<tag>.zip` via `ExportStorage.put` (widened to accept `string | Uint8Array`), and records an `artifact_versions` row with its sha256, exactly like a registry item. A tag with no zip (repo deleted, tag removed after the webhook fired) records `download_zip_missing` drift instead of failing the job.
+- Immutable the same way as 11.1: `artifactVersionExists` is checked before any GitHub call or storage write, so a repeat release publish never re-fetches or overwrites an already-recorded zip.
+- Version resolution (`getLatestArtifactVersion`, `deniedLicenseStatuses`) is shared verbatim between registry items and downloads, factored out of `packages/db/src/registry.ts`: the same four statuses end access, and the same "latest version at or before `updates_until`, else latest overall" rule picks which build a buyer gets.
+- Buyer endpoint: `GET /buyer/access/:licenseId/download` (session-authenticated, JSON only). `resolveDownloadForBuyer` (`packages/db/src/downloads.ts`) is tenant-scoped through the buyer's own, unreleased seat on that license (invariant 6: a license that is not theirs, or a released seat, returns 404 via `NotFoundError`, never 403). A denied license status returns `403 auth_error`; no built version yet returns `404`. On success the response is a short-lived (300 second) signed R2 URL plus the version string, never a public object URL.
 
 ---
 
