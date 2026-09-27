@@ -235,8 +235,8 @@ Read: product sections 6, 8, 9.
 2. Infrastructure with Cloudflare Containers and Workers, Supabase PostgreSQL, private R2 exports, Cloudflare secret bindings, observability, alarms, and backups. No AWS infrastructure in the early beta (D-032).
 3. Staging environment deployed from main, production from tags.
 4. Runbooks in `docs/runbooks/`: replay events, reprocess unmapped, installation lost, provider outage, GitHub outage, rotate secrets, restore backup.
-5. Security pass: dependency audit, secrets scan, review of every gate listed in `CLAUDE.md` invariants with a link to its negative test, rate limits on auth, claim, resend, registry.
-6. Terms, privacy policy, data processing notes (owner provides text; agent adds pages).
+5. Security pass: dependency audit, secrets scan, review of every gate listed in `CLAUDE.md` invariants with a link to its negative test. Rate limits on auth, claim, resend, and registry are Cloudflare Rate Limiting rules configured at the Cloudflare deploy step, not in-app code (D-036).
+6. Terms, privacy policy, data processing notes (owner provides text; agent adds pages). Deferred to before the real public launch, not required for the private beta (D-035).
 7. 72-hour staging soak: synthetic purchases, refunds, disputes, renames, uninstalls, and GitHub error injection on a schedule; zero invariant violations and zero stuck grants.
 
 **Acceptance criteria**
